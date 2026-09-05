@@ -23,6 +23,13 @@ export interface Seat {
 	role: Role;
 }
 
+/** En qué momento está la partida. */
+export type Phase =
+	/** Eligiendo asiento. Nadie toca el tablero hasta que la mesa esté formada. */
+	| "asientos"
+	/** En juego. */
+	| "jugando";
+
 /**
  * Todo el estado de una partida.
  *
@@ -32,6 +39,7 @@ export interface Seat {
  * secreto: quien se sienta de jefe ha decidido ver la clave.
  */
 export interface GameState {
+	phase: Phase;
 	board: Board;
 	/**
 	 * Asiento de cada jugador, por identificador de móvil. Es lo que permite al
@@ -39,6 +47,11 @@ export interface GameState {
 	 * pantalla. Quien no está aquí mira sin jugar.
 	 */
 	seats: Readonly<Record<string, Seat>>;
+	/**
+	 * Quién ha dicho "listo" durante la preparación. Se vacía al sentarse en
+	 * otro sitio: cambiar de equipo es volver a decidir.
+	 */
+	ready: Readonly<Record<string, true>>;
 	/** 25 booleanos: qué cartas se han destapado ya. */
 	revealed: readonly boolean[];
 	/**
@@ -64,6 +77,13 @@ export type GameAction =
 	| { type: "sit"; team: Team; role: Role }
 	/** Levantarse: volver a mirar sin jugar. */
 	| { type: "stand" }
+	/** Decir "listo" (o dejar de estarlo) con el asiento elegido. */
+	| { type: "ready" }
+	/**
+	 * Empezar. Sólo procede si todos los de la sala están sentados y listos y
+	 * cada equipo tiene al menos un jefe y un agente.
+	 */
+	| { type: "start" }
 	/** Señalar una carta (o dejar de señalarla). Lo hacen los agentes del equipo en turno. */
 	| { type: "vote"; index: number }
 	/** Destapar una carta. Lo hace el jefe del equipo en turno, cuando su equipo se decide. */

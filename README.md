@@ -57,8 +57,11 @@ nada.
   mesa o lo recoge — la forma más simple de que no haya cinco dedos cambiando de
   juego a la vez.
 - **Juego.** Recibe la gente de la sala y no lleva lista propia. Código Secreto
-  pide elegir equipo y papel al entrar (y el motor hace cumplir quién destapa y
-  quién señala según el asiento); El Espía reparte directamente a quien esté.
+  empieza formando la mesa: cada uno elige equipo y papel y dice "listo", y el
+  tablero no aparece hasta que todos los de la sala están sentados y listos y
+  cada equipo tiene al menos un jefe y un agente — lo comprueba el motor, no la
+  pantalla. Después, el asiento manda: destapa el jefe del equipo en turno y
+  señalan sus agentes. El Espía reparte directamente a quien esté.
 
 ## Cómo se sincroniza una partida
 

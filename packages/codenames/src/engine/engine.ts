@@ -13,7 +13,8 @@ import type { GameAction, GameState, Role, Team } from "./types.ts";
  */
 export const engine: GameEngine<GameState, GameAction> = {
 	create: ({ seed, now }) => createGame(seed, now),
-	apply: (state, action, { actor, now }) => applyAction(state, action, actor, now),
+	apply: (state, action, { actor, players, now }) =>
+		applyAction(state, action, actor, players, now),
 	parseAction,
 };
 
@@ -27,7 +28,9 @@ function parseAction(value: unknown): GameAction | null {
 				? { type: "sit", team: action.team, role: action.role }
 				: null;
 		case "stand":
-			return { type: "stand" };
+		case "ready":
+		case "start":
+			return { type: action.type };
 		case "vote":
 		case "reveal":
 		case "unreveal":

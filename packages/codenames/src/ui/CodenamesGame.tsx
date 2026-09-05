@@ -6,8 +6,10 @@ import { TeamPicker } from "./TeamPicker.tsx";
 /**
  * Código Secreto dentro de una sala.
  *
- * Primero eliges asiento; con asiento, ves el tablero desde tu lado. Levantarte
- * te devuelve a elegir. No hay más pantallas: el lobby es la sala.
+ * Primero se forma la mesa —equipo, papel, listo— y nadie ve el tablero hasta
+ * que alguien pulsa empezar con la mesa completa. Con la partida en marcha,
+ * quien tiene asiento ve el tablero desde su lado; quien no (llegó tarde, o se
+ * levantó) vuelve a elegir sitio.
  */
 export function CodenamesGame({
 	code,
@@ -20,14 +22,16 @@ export function CodenamesGame({
 }: GameScreenProps<GameState, GameAction>) {
 	const seat = view.seats[profile.id];
 
-	if (!seat) {
+	if (view.phase === "asientos" || !seat) {
 		return (
 			<TeamPicker
 				code={code}
-				seats={view.seats}
+				state={view}
 				players={players}
 				profile={profile}
 				onSit={(team, role) => play({ type: "sit", team, role })}
+				onReady={() => play({ type: "ready" })}
+				onStart={() => play({ type: "start" })}
 				onExit={onExit}
 			/>
 		);

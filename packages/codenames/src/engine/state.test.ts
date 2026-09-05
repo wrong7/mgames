@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PlayerProfile } from "@mgames/game-kit";
 import { buildBoard, CARD_COUNT, remainingFor } from "./board.ts";
-import { applyAction, createGame } from "./state.ts";
+import { applyAction, canStart, createGame } from "./state.ts";
 import type { CardKind, GameAction, GameState, Team } from "./types.ts";
 import { WORDS } from "./words.ts";
 
@@ -18,28 +18,33 @@ const jefeB = who("jefeB");
 const agenteB = who("agenteB");
 const miron = who("miron");
 
-/**
- * Una partida con los cuatro sentados: jefe y agente en el equipo que empieza
- * (A) y en el otro (B). Casi todos los tests necesitan esto.
- */
-function partida(seed = "PARTIDA"): GameState {
+/** La gente de la sala en casi todos los tests: los cuatro que hacen falta. */
+const mesa = [jefeA, agenteA, jefeB, agenteB];
+
+const as = (state: GameState, action: GameAction, actor: PlayerProfile, players = mesa) =>
+	applyAction(state, action, actor, players);
+
+/** Los cuatro sentados —jefe y agente en el equipo que empieza (A) y en el otro (B)— y listos. */
+function preparada(seed = "PARTIDA"): GameState {
 	const fresh = createGame(seed);
 	const a = fresh.board.startingTeam;
 	const b = other(a);
 	let state = fresh;
-	state = applyAction(state, { type: "sit", team: a, role: "jefe" }, jefeA);
-	state = applyAction(state, { type: "sit", team: a, role: "agente" }, agenteA);
-	state = applyAction(state, { type: "sit", team: b, role: "jefe" }, jefeB);
-	state = applyAction(state, { type: "sit", team: b, role: "agente" }, agenteB);
+	state = as(state, { type: "sit", team: a, role: "jefe" }, jefeA);
+	state = as(state, { type: "sit", team: a, role: "agente" }, agenteA);
+	state = as(state, { type: "sit", team: b, role: "jefe" }, jefeB);
+	state = as(state, { type: "sit", team: b, role: "agente" }, agenteB);
+	for (const p of mesa) state = as(state, { type: "ready" }, p);
 	return state;
 }
 
+/** Una partida ya empezada. */
+const partida = (seed = "PARTIDA") => as(preparada(seed), { type: "start" }, jefeA);
+
 const reveal = (state: GameState, index: number, actor: PlayerProfile = jefeA) =>
-	applyAction(state, { type: "reveal", index }, actor);
+	as(state, { type: "reveal", index }, actor);
 const vote = (state: GameState, index: number, actor: PlayerProfile = agenteA) =>
-	applyAction(state, { type: "vote", index }, actor);
-const as = (state: GameState, action: GameAction, actor: PlayerProfile) =>
-	applyAction(state, action, actor);
+	as(state, { type: "vote", index }, actor);
 
 describe("reparto", () => {
 	it("da 25 palabras distintas de la baraja", () => {
@@ -71,13 +76,95 @@ describe("reparto", () => {
 	});
 });
 
-describe("asientos", () => {
+describe("preparación", () => {
+	it("empieza sin nadie sentado y sin poder arrancar", () => {
+		const fresh = createGame("S");
+		assert.equal(fresh.phase, "asientos");
+		assert.equal(canStart(fresh, mesa), false);
+		assert.equal(as(fresh, { type: "start" }, jefeA), fresh);
+	});
+
 	it("sentarse registra equipo y papel; repetirlo no cambia nada", () => {
 		const state = as(createGame("S"), { type: "sit", team: "azul", role: "jefe" }, jefeA);
 		assert.deepEqual(state.seats, { jefeA: { team: "azul", role: "jefe" } });
 		assert.equal(as(state, { type: "sit", team: "azul", role: "jefe" }, jefeA), state);
 	});
 
+	it("listo se activa y se desactiva, y sólo con asiento", () => {
+		const sin = createGame("S");
+		assert.equal(as(sin, { type: "ready" }, jefeA), sin);
+		const sentado = as(sin, { type: "sit", team: "azul", role: "jefe" }, jefeA);
+		const listo = as(sentado, { type: "ready" }, jefeA);
+		assert.deepEqual(listo.ready, { jefeA: true });
+		assert.deepEqual(as(listo, { type: "ready" }, jefeA).ready, {});
+	});
+
+	it("cambiar de sitio o levantarse quita el listo", () => {
+		const state = preparada();
+		assert.equal(
+			as(state, { type: "sit", team: "rojo", role: "agente" }, jefeA).ready.jefeA,
+			undefined,
+		);
+		assert.equal(as(state, { type: "stand" }, jefeA).ready.jefeA, undefined);
+	});
+
+	it("con todos sentados y listos y las dos parejas completas, se puede empezar", () => {
+		const state = preparada();
+		assert.equal(canStart(state, mesa), true);
+		assert.equal(partida().phase, "jugando");
+	});
+
+	it("no empieza si alguien no ha dicho listo", () => {
+		const state = as(preparada(), { type: "ready" }, agenteB);
+		assert.equal(canStart(state, mesa), false);
+		assert.equal(as(state, { type: "start" }, jefeA), state);
+	});
+
+	it("no empieza si a un equipo le falta el jefe o el agente", () => {
+		const state = preparada();
+		const sinAgenteB = as(as(state, { type: "stand" }, agenteB), { type: "ready" }, agenteB);
+		assert.equal(canStart(sinAgenteB, mesa), false);
+		// Ni siquiera con todos los presentes listos, si están en el mismo lado.
+		const b = other(state.board.startingTeam);
+		let amontonados = as(state, { type: "sit", team: b, role: "agente" }, jefeB);
+		amontonados = as(amontonados, { type: "ready" }, jefeB);
+		assert.equal(canStart(amontonados, mesa), false);
+	});
+
+	it("no empieza si alguien de la sala sigue sin sentarse", () => {
+		const state = preparada();
+		assert.equal(canStart(state, [...mesa, miron]), false);
+		assert.equal(as(state, { type: "start" }, jefeA, [...mesa, miron]), state);
+	});
+
+	it("quien se fue de la sala no bloquea el arranque aunque dejara el asiento", () => {
+		const state = as(preparada(), { type: "ready" }, agenteB);
+		// agenteB ya no está en la sala: su "no listo" no cuenta. Pero entonces al
+		// equipo B le falta agente, así que hace falta otro.
+		const sinB = mesa.filter((p) => p !== agenteB);
+		assert.equal(canStart(state, sinB), false);
+		const b = other(state.board.startingTeam);
+		let conOtro = as(state, { type: "sit", team: b, role: "agente" }, miron);
+		conOtro = as(conOtro, { type: "ready" }, miron);
+		assert.equal(canStart(conOtro, [...sinB, miron]), true);
+	});
+
+	it("sólo alguien sentado puede pulsar empezar", () => {
+		const state = preparada();
+		assert.equal(as(state, { type: "start" }, miron), state);
+		assert.equal(as(state, { type: "start" }, agenteB).phase, "jugando");
+	});
+
+	it("nadie toca el tablero antes de empezar", () => {
+		const state = preparada();
+		assert.equal(reveal(state, 0), state);
+		assert.equal(vote(state, 0), state);
+		assert.equal(as(state, { type: "endTurn" }, jefeA), state);
+		assert.equal(as(state, { type: "restart", seed: "X" }, jefeA), state);
+	});
+});
+
+describe("asientos durante la partida", () => {
 	it("cambiar de sitio retira tu ficha", () => {
 		const state = vote(partida(), 3);
 		const moved = as(state, { type: "sit", team: state.turn, role: "jefe" }, agenteA);
@@ -97,12 +184,17 @@ describe("asientos", () => {
 		assert.equal(as(state, { type: "endTurn" }, miron), state);
 		assert.equal(as(state, { type: "restart", seed: "X" }, miron), state);
 	});
+
+	it("repartir de nuevo conserva los asientos y sigue en juego", () => {
+		const state = as(partida(), { type: "restart", seed: "X" }, jefeA);
+		assert.equal(state.phase, "jugando");
+		assert.deepEqual(state.seats, partida().seats);
+	});
 });
 
 describe("quién puede destapar", () => {
 	it("el jefe del equipo en turno destapa", () => {
-		const state = partida();
-		assert.equal(reveal(state, 0, jefeA).revealed[0], true);
+		assert.equal(reveal(partida(), 0, jefeA).revealed[0], true);
 	});
 
 	it("un agente no destapa, aunque lo intente", () => {
@@ -244,17 +336,15 @@ describe("votos", () => {
 	it("destapar una carta propia retira sólo las fichas de esa carta", () => {
 		const propia = find(game, game.turn);
 		const otra = game.board.kinds.findIndex((k, i) => k === game.turn && i !== propia);
-		const state = vote(vote(game, propia), otra, who("agenteA2"));
-		// El segundo agente también tiene que estar sentado.
-		const sentado = as(state, { type: "sit", team: game.turn, role: "agente" }, who("agenteA2"));
-		const next = reveal(vote(sentado, otra, who("agenteA2")), propia);
+		const segundo = who("agenteA2");
+		const sentado = as(game, { type: "sit", team: game.turn, role: "agente" }, segundo);
+		const next = reveal(vote(vote(sentado, propia), otra, segundo), propia);
 		assert.deepEqual(Object.keys(next.votes), ["agenteA2"]);
 	});
 
 	it("destapar una carta que cierra el turno retira todas las fichas", () => {
 		const neutral = find(game, "neutral");
-		const next = reveal(vote(game, neutral), neutral);
-		assert.deepEqual(next.votes, {});
+		assert.deepEqual(reveal(vote(game, neutral), neutral).votes, {});
 	});
 
 	it("pasar turno y repartir de nuevo limpian las fichas", () => {
