@@ -1,3 +1,4 @@
+import { Avatar, useProfile } from "@mgames/game-kit/react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { GAMES, type GameEntry } from "../games.ts";
 
@@ -11,10 +12,24 @@ export const Route = createFileRoute("/")({ component: Catalogo });
  * comparten es la forma de la tarjeta.
  */
 function Catalogo() {
+	const { profile } = useProfile();
+
 	return (
 		<main className="h-dvh overflow-y-auto bg-neutral-950 px-5 pb-10 text-white">
 			<header className="pt-12 pb-8">
-				<h1 className="text-4xl font-black uppercase leading-none tracking-tight">No mires</h1>
+				<div className="flex items-start justify-between gap-4">
+					<h1 className="text-4xl font-black uppercase leading-none tracking-tight">No mires</h1>
+					{profile && (
+						<Link
+							to="/perfil"
+							className="flex shrink-0 items-center gap-2 rounded-full bg-white/10 py-1 pr-3 pl-1 text-sm active:scale-95"
+							aria-label="Cambiar nombre o cara"
+						>
+							<Avatar seed={profile.avatar} size={28} className="block" />
+							{profile.name}
+						</Link>
+					)}
+				</div>
 				<p className="mt-2 max-w-xs text-sm text-white/60">
 					Juegos para jugar en persona, cada uno en su móvil: tu pantalla dice algo que la de al
 					lado no. Se entra con un código y no hay nada que instalar.

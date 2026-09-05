@@ -1,13 +1,7 @@
-import { randomCode } from "@mgames/game-kit";
+import { type PlayerProfile, randomCode } from "@mgames/game-kit";
 import { type RoomStatus, useGameRoom, useWakeLock } from "@mgames/game-kit/react";
-import { useState } from "react";
-import {
-	engine,
-	MAX_NAME_LENGTH,
-	MIN_PLAYERS,
-	type SpyAction,
-	type SpyView,
-} from "../engine/index.ts";
+import { useEffect } from "react";
+import { engine, MIN_PLAYERS, type SpyView } from "../engine/index.ts";
 import { manifest } from "../manifest.ts";
 import { COLORS } from "../theme.ts";
 import { LocationList } from "./LocationList.tsx";
@@ -19,6 +13,8 @@ export interface SpyScreenProps {
 	code: string;
 	/** Origen del servidor de salas. Sin él este juego no se puede jugar. */
 	realtimeUrl?: string;
+	/** Quién es este móvil. Entra en la sala con este nombre y esta cara. */
+	profile: PlayerProfile;
 	onExit?: () => void;
 }
 
@@ -28,16 +24,25 @@ export interface SpyScreenProps {
  * A diferencia de Código Secreto, aquí no hay dos vistas que elegir: cada móvil
  * es un jugador y lo que ve depende de lo que le haya tocado.
  */
-export function SpyScreen({ code, realtimeUrl, onExit }: SpyScreenProps) {
-	const { view, status, playerId, dispatch } = useGameRoom({
+export function SpyScreen({ code, realtimeUrl, profile, onExit }: SpyScreenProps) {
+	const { view, status, synced, playerId, dispatch } = useGameRoom({
 		engine,
 		game: manifest.slug,
 		code,
 		realtimeUrl,
+		profile,
 	});
 	useWakeLock();
 
 	const me = view.players.find((player) => player.id === playerId);
+
+	// Entrar en la sala es automático: el perfil ya dice quién eres, así que no
+	// hay nada que preguntar. Se reintenta con cada estado nuevo por si la sala
+	// estaba en mitad de una ronda al llegar y se abre después.
+	const canJoin = status === "conectado" && synced && !me && view.phase === "sala";
+	useEffect(() => {
+		if (canJoin) dispatch({ type: "unirse" });
+	}, [canJoin, dispatch]);
 
 	return (
 		<div
@@ -73,13 +78,15 @@ function Body({
 	status: RoomStatus;
 	playerId: string;
 	joined: boolean;
-	dispatch: (action: SpyAction) => void;
+	dispatch: (action: Parameters<typeof engine.apply>[1]) => void;
 }) {
 	// Sin sala compartida no hay reparto que valga: este juego consiste justamente
 	// en que cada móvil reciba algo distinto.
 	if (status === "local") return <Disconnected />;
 
-	if (!joined) return <JoinForm onJoin={(name) => dispatch({ type: "unirse", name })} />;
+	// Sin estar dentro no hay nada que hacer: o la sala está en mitad de una
+	// ronda, o el servidor aún no ha contestado al "unirse".
+	if (!joined) return <Outside view={view} />;
 
 	if (view.phase === "sala") {
 		return (
@@ -145,40 +152,19 @@ function Disconnected() {
 	);
 }
 
-function JoinForm({ onJoin }: { onJoin: (name: string) => void }) {
-	const [name, setName] = useState("");
-	const ready = name.trim().length > 0;
-
+function Outside({ view }: { view: SpyView }) {
+	const inRound = view.phase !== "sala";
 	return (
-		<form
-			className="flex flex-1 flex-col items-center justify-center gap-4"
-			onSubmit={(event) => {
-				event.preventDefault();
-				if (ready) onJoin(name);
-			}}
-		>
-			<label htmlFor="nombre" className="text-xs uppercase tracking-[0.3em] opacity-60">
-				¿Cómo te llamas?
-			</label>
-			<input
-				id="nombre"
-				value={name}
-				onChange={(event) => setName(event.target.value)}
-				maxLength={MAX_NAME_LENGTH}
-				autoCapitalize="words"
-				autoComplete="off"
-				className="w-full rounded-2xl px-4 py-4 text-center text-2xl font-bold outline-none"
-				style={{ backgroundColor: COLORS.paper, color: COLORS.night }}
-			/>
-			<button
-				type="submit"
-				disabled={!ready}
-				className="w-full rounded-2xl py-4 text-lg font-black uppercase tracking-widest active:scale-[0.98] disabled:opacity-40"
-				style={{ backgroundColor: COLORS.gold, color: COLORS.night }}
-			>
-				Entrar
-			</button>
-		</form>
+		<div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+			<p className="text-2xl font-black uppercase tracking-tight">
+				{inRound ? "Ronda en marcha" : "Entrando…"}
+			</p>
+			<p className="max-w-[26ch] text-sm opacity-70">
+				{inRound
+					? "Entrarás cuando termine y vuelvan a la sala."
+					: "Un momento, la sala está respondiendo."}
+			</p>
+		</div>
 	);
 }
 

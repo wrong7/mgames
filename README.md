@@ -40,6 +40,20 @@ pnpm check-types  # TypeScript en todo el monorepo
 pnpm check        # Biome (formato y lint)
 ```
 
+## Quién juega
+
+No hay cuentas. La primera vez que alguien abre un juego se le pide un nombre y
+se le da una cara (un *blobatar*, generado a partir de una semilla que puede
+volver a tirar hasta que le guste). Eso se guarda en el móvil y desde ahí viaja
+con cada conexión y con cada jugada: es lo que los demás ven en las fichas y en
+las listas de jugadores, en todos los juegos. La ruta `_jugador` de la app es la
+puerta: ningún juego se abre sin perfil.
+
+El servidor recibe el perfil al abrir el WebSocket, lo adjunta al socket (así
+sobrevive a la hibernación del Durable Object) y lo pasa al motor con cada
+acción como `ctx.actor`. Un motor que quiera saber quién hizo la jugada, o
+pintar su cara, lo lee de ahí; no hay una acción de "unirse con nombre".
+
 ## Cómo se sincroniza una partida
 
 Cada sala es un Durable Object, identificado por el juego y el código que los

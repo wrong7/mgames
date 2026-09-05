@@ -125,6 +125,12 @@ importers:
 
   packages/game-kit:
     dependencies:
+      '@blobatar/react':
+        specifier: ^2.7.0
+        version: 2.7.0(blobatar@2.7.0(react@19.2.8))(react@19.2.8)
+      blobatar:
+        specifier: ^2.7.0
+        version: 2.7.0(react@19.2.8)
       react:
         specifier: '>=19'
         version: 19.2.8
@@ -283,6 +289,12 @@ packages:
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
+
+  '@blobatar/react@2.7.0':
+    resolution: {integrity: sha512-rysDM1+2qoeIwIezVw/em+ZxOMyqqjqJOGNEvtOOU1nFp0jmzyEjlXtJTDM6xPKamq59pq6wcG9+mHIUZV572A==}
+    peerDependencies:
+      blobatar: 2.x
+      react: '>=18'
 
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
@@ -1342,6 +1354,17 @@ packages:
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
 
+  blobatar@2.7.0:
+    resolution: {integrity: sha512-tL1p2J3dXE/Z9U/ITwHqU7HBHmTH+Am+hif1J1hWAhvFT1VYC2HG+eXtN7081yuY+L2lrp9bs/VaF7dVH3S2jw==}
+    peerDependencies:
+      react: '>=18'
+      vue: '>=3'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      vue:
+        optional: true
+
   browserslist@4.28.9:
     resolution: {integrity: sha512-EWazOblFYUvlGZcfGhPUPmYh3nikUxBVb+y9MJun5f3hBi812X+8MSQTujLBtgK3cf51fJWbWfOjyeO954d+Eg==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
@@ -2325,6 +2348,11 @@ snapshots:
   '@biomejs/cli-win32-x64@2.4.5':
     optional: true
 
+  '@blobatar/react@2.7.0(blobatar@2.7.0(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      blobatar: 2.7.0(react@19.2.8)
+      react: 19.2.8
+
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
   '@cloudflare/unenv-preset@2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260903.1)':
@@ -3228,6 +3256,10 @@ snapshots:
   baseline-browser-mapping@2.11.21: {}
 
   blake3-wasm@2.1.5: {}
+
+  blobatar@2.7.0(react@19.2.8):
+    optionalDependencies:
+      react: 19.2.8
 
   browserslist@4.28.9:
     dependencies:

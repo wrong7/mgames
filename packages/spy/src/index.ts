@@ -22,7 +22,6 @@ export {
 	engine,
 	LOCATION_NAMES,
 	LOCATIONS,
-	MAX_NAME_LENGTH,
 	MAX_PLAYERS,
 	MIN_PLAYERS,
 	project,

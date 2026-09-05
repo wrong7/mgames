@@ -1,3 +1,5 @@
+import type { PlayerProfile } from "./profile.ts";
+
 /**
  * El contrato que cumple el motor de cada juego.
  *
@@ -58,4 +60,10 @@ export interface EngineContext {
 export interface ActorContext extends EngineContext {
 	/** Quién hace la jugada: el identificador del móvil que la envió. */
 	actorId: string;
+	/**
+	 * El perfil de quien la hace. Va con cada acción para que un motor que
+	 * necesite el nombre o la cara —para una ficha, una lista de jugadores— no
+	 * tenga que pedirlos con una acción aparte ni guardarlos por su cuenta.
+	 */
+	actor: PlayerProfile;
 }

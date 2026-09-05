@@ -1,6 +1,6 @@
-import { createRng } from "@mgames/game-kit";
+import { createRng, type PlayerProfile } from "@mgames/game-kit";
 import { LOCATION_NAMES, LOCATIONS } from "./locations.ts";
-import { MAX_PLAYERS, MIN_PLAYERS, normalizeName, spyCountFor } from "./rules.ts";
+import { MAX_PLAYERS, MIN_PLAYERS, spyCountFor } from "./rules.ts";
 import type { Card, Round, SpyAction, SpyPlayer, SpyState, SpyView } from "./types.ts";
 
 /** Una sala vacía, esperando a que llegue la gente. */
@@ -43,22 +43,22 @@ export function deal(players: readonly SpyPlayer[], seed: string): Round {
 export function applyAction(
 	state: SpyState,
 	action: SpyAction,
-	actorId: string,
+	actor: PlayerProfile,
 	now: number = Date.now(),
 ): SpyState {
+	const actorId = actor.id;
 	switch (action.type) {
 		case "unirse": {
-			const name = normalizeName(action.name);
-			if (!name || !actorId) return state;
+			const player: SpyPlayer = { id: actor.id, name: actor.name, avatar: actor.avatar };
 
-			const existing = state.players.find((player) => player.id === actorId);
+			const existing = state.players.find((p) => p.id === actorId);
 			// Volver a entrar con el mismo móvil no crea un jugador nuevo: es el que
-			// recargó la página o volvió de bloquear la pantalla.
+			// recargó la página, volvió de bloquear la pantalla o se cambió de cara.
 			if (existing) {
-				if (existing.name === name) return state;
+				if (existing.name === player.name && existing.avatar === player.avatar) return state;
 				return {
 					...state,
-					players: state.players.map((p) => (p.id === actorId ? { ...p, name } : p)),
+					players: state.players.map((p) => (p.id === actorId ? player : p)),
 					updatedAt: now,
 				};
 			}
@@ -66,7 +66,7 @@ export function applyAction(
 			// Con la ronda empezada no entra nadie: le tocaría una carta que no existe.
 			if (state.phase !== "sala" || state.players.length >= MAX_PLAYERS) return state;
 
-			return { ...state, players: [...state.players, { id: actorId, name }], updatedAt: now };
+			return { ...state, players: [...state.players, player], updatedAt: now };
 		}
 
 		case "salir": {

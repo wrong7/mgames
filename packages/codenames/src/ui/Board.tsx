@@ -1,4 +1,4 @@
-import type { Board as BoardData, CardKind } from "../engine/index.ts";
+import type { Board as BoardData, CardKind, Vote } from "../engine/index.ts";
 import { Card } from "./Card.tsx";
 
 export interface BoardProps {
@@ -9,12 +9,31 @@ export interface BoardProps {
 	 * si es `false`, sólo el de las que ya se han destapado.
 	 */
 	showAllKinds: boolean;
+	/** Las fichas de todos, por jugador. */
+	votes?: Readonly<Record<string, Vote>>;
+	/** Quién mira, para resaltar su propia ficha. */
+	meId?: string;
 	onCardPress?: (index: number) => void;
 	disabled?: boolean;
 }
 
 /** La rejilla de 5x5. Ocupa todo el alto disponible y no hace scroll. */
-export function Board({ board, revealed, showAllKinds, onCardPress, disabled }: BoardProps) {
+export function Board({
+	board,
+	revealed,
+	showAllKinds,
+	votes = {},
+	meId,
+	onCardPress,
+	disabled,
+}: BoardProps) {
+	// De "un voto por jugador" a "quiénes señalan cada carta", que es como se pinta.
+	const votesByCard = new Map<number, Vote[]>();
+	for (const vote of Object.values(votes)) {
+		votesByCard.set(vote.index, [...(votesByCard.get(vote.index) ?? []), vote]);
+	}
+	const myIndex = meId ? votes[meId]?.index : undefined;
+
 	return (
 		<div
 			// El contenedor de consulta que usan las cartas para dimensionar su texto.
@@ -32,6 +51,8 @@ export function Board({ board, revealed, showAllKinds, onCardPress, disabled }: 
 						word={word}
 						kind={kind}
 						revealed={isRevealed}
+						votes={votesByCard.get(index)}
+						mine={myIndex === index}
 						disabled={disabled}
 						onClick={onCardPress ? () => onCardPress(index) : undefined}
 					/>

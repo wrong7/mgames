@@ -1,4 +1,4 @@
-import { randomCode } from "@mgames/game-kit";
+import { type PlayerProfile, randomCode } from "@mgames/game-kit";
 import { useGameRoom, useWakeLock } from "@mgames/game-kit/react";
 import { useState } from "react";
 import { engine, type Team } from "../engine/index.ts";
@@ -19,6 +19,8 @@ export interface GameScreenProps {
 	 * cada móvil lleva sus propias marcas.
 	 */
 	realtimeUrl?: string;
+	/** Quién mira: sus fichas llevan su cara. */
+	profile: PlayerProfile;
 	/** Volver al menú del juego. La app decide qué significa eso. */
 	onExit?: () => void;
 }
@@ -30,7 +32,7 @@ export interface GameScreenProps {
  * blanco que se colorean al destaparse. Es la misma partida y el mismo estado:
  * lo único que cambia es cuánto se enseña.
  */
-export function GameScreen({ code, role, realtimeUrl, onExit }: GameScreenProps) {
+export function GameScreen({ code, role, realtimeUrl, profile, onExit }: GameScreenProps) {
 	const {
 		view: state,
 		status,
@@ -41,14 +43,21 @@ export function GameScreen({ code, role, realtimeUrl, onExit }: GameScreenProps)
 		game: manifest.slug,
 		code,
 		realtimeUrl,
+		profile,
 	});
 	const isMaster = role === "master";
 
 	// Una partida son veinte minutos mirando el tablero a ratos y hablando el resto.
 	useWakeLock();
 
-	const toggleCard = (index: number) => {
-		dispatch(state.revealed[index] ? { type: "unreveal", index } : { type: "reveal", index });
+	// El jefe destapa (y vuelve a tapar si se equivoca de dedo); los agentes sólo
+	// señalan. Es la regla del juego de mesa: el jefe es quien toca las cartas.
+	const pressCard = (index: number) => {
+		if (isMaster) {
+			dispatch(state.revealed[index] ? { type: "unreveal", index } : { type: "reveal", index });
+		} else {
+			dispatch({ type: "vote", index });
+		}
 	};
 
 	return (
@@ -74,7 +83,9 @@ export function GameScreen({ code, role, realtimeUrl, onExit }: GameScreenProps)
 				board={state.board}
 				revealed={state.revealed}
 				showAllKinds={isMaster}
-				onCardPress={toggleCard}
+				votes={state.votes}
+				meId={profile.id}
+				onCardPress={pressCard}
 			/>
 
 			<Controls
@@ -153,24 +164,26 @@ function Controls({
 				Pasar turno
 			</button>
 
-			<button
-				type="button"
-				onClick={() => {
-					if (confirmingRestart) {
-						onRestart();
-						setConfirmingRestart(false);
-					} else {
-						setConfirmingRestart(true);
-						setTimeout(() => setConfirmingRestart(false), 3000);
-					}
-				}}
-				className={[
-					"rounded-xl px-4 text-sm font-bold uppercase tracking-widest active:scale-95",
-					confirmingRestart ? "bg-white text-black" : "bg-black/80 text-white",
-				].join(" ")}
-			>
-				{confirmingRestart ? "¿Seguro?" : isMaster ? "Repartir" : "Nueva"}
-			</button>
+			{isMaster && (
+				<button
+					type="button"
+					onClick={() => {
+						if (confirmingRestart) {
+							onRestart();
+							setConfirmingRestart(false);
+						} else {
+							setConfirmingRestart(true);
+							setTimeout(() => setConfirmingRestart(false), 3000);
+						}
+					}}
+					className={[
+						"rounded-xl px-4 text-sm font-bold uppercase tracking-widest active:scale-95",
+						confirmingRestart ? "bg-white text-black" : "bg-black/80 text-white",
+					].join(" ")}
+				>
+					{confirmingRestart ? "¿Seguro?" : "Repartir"}
+				</button>
+			)}
 		</div>
 	);
 }

@@ -3,7 +3,7 @@ import { normalizeCode, randomCode } from "@mgames/game-kit";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect } from "react";
 
-export const Route = createFileRoute("/codigo-secreto/")({
+export const Route = createFileRoute("/_jugador/codigo-secreto/")({
 	// El código vive en la URL para que se pueda compartir el enlace de la sala
 	// además de dictar el código en voz alta. Es opcional para poder enlazar el
 	// juego desde el catálogo sin inventarse uno: al entrar sin él se propone.

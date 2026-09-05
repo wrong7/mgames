@@ -1,23 +1,31 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { PlayerProfile } from "@mgames/game-kit";
 import { LOCATIONS } from "./locations.ts";
 import { MAX_PLAYERS, MIN_PLAYERS, spyCountFor } from "./rules.ts";
 import { applyAction, createGame, deal, project } from "./state.ts";
 import type { SpyPlayer, SpyState } from "./types.ts";
 
 const players = (n: number): SpyPlayer[] =>
-	Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `Jugador ${i}` }));
+	Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `Jugador ${i}`, avatar: `cara${i}` }));
+
+/** El perfil con el que un jugador de la lista envía sus acciones. */
+const como = (id: string): PlayerProfile => ({
+	id,
+	name: `Jugador ${id.slice(1)}`,
+	avatar: `cara${id.slice(1)}`,
+});
 
 /** Sala con `n` jugadores dentro. */
 function salaCon(n: number): SpyState {
 	return players(n).reduce<SpyState>(
-		(state, player) => applyAction(state, { type: "unirse", name: player.name }, player.id),
+		(state, player) => applyAction(state, { type: "unirse" }, player),
 		createGame("SALA"),
 	);
 }
 
 const jugando = (n: number, seed = "RONDA") =>
-	applyAction(salaCon(n), { type: "repartir", seed }, "p0");
+	applyAction(salaCon(n), { type: "repartir", seed }, como("p0"));
 
 describe("entrar y salir de la sala", () => {
 	it("cada móvil entra una vez", () => {
@@ -29,36 +37,34 @@ describe("entrar y salir de la sala", () => {
 		);
 	});
 
-	it("volver a entrar con el mismo móvil cambia el nombre, no añade un jugador", () => {
-		const sala = applyAction(salaCon(3), { type: "unirse", name: "Otro" }, "p1");
+	it("volver a entrar con el mismo móvil actualiza nombre y cara, no añade un jugador", () => {
+		const otro = { id: "p1", name: "Otro", avatar: "x" };
+		const sala = applyAction(salaCon(3), { type: "unirse" }, otro);
 		assert.equal(sala.players.length, 3);
-		assert.equal(sala.players.find((p) => p.id === "p1")?.name, "Otro");
+		assert.deepEqual(
+			sala.players.find((p) => p.id === "p1"),
+			otro,
+		);
 	});
 
-	it("ignora nombres vacíos y móviles sin identidad", () => {
+	it("volver a entrar sin cambios no toca el estado", () => {
 		const sala = salaCon(3);
-		assert.equal(applyAction(sala, { type: "unirse", name: "   " }, "p9"), sala);
-		assert.equal(applyAction(sala, { type: "unirse", name: "Ana" }, ""), sala);
-	});
-
-	it("recorta los nombres largos en vez de rechazarlos", () => {
-		const sala = applyAction(createGame("X"), { type: "unirse", name: "A".repeat(40) }, "p0");
-		assert.equal(sala.players[0]?.name.length, 16);
+		assert.equal(applyAction(sala, { type: "unirse" }, como("p1")), sala);
 	});
 
 	it("no deja entrar por encima del máximo", () => {
 		const llena = salaCon(MAX_PLAYERS);
-		const sobra = applyAction(llena, { type: "unirse", name: "Tarde" }, "extra");
+		const sobra = applyAction(llena, { type: "unirse" }, como("p99"));
 		assert.equal(sobra, llena);
 	});
 
 	it("nadie entra con la ronda empezada", () => {
 		const ronda = jugando(4);
-		assert.equal(applyAction(ronda, { type: "unirse", name: "Tarde" }, "nuevo"), ronda);
+		assert.equal(applyAction(ronda, { type: "unirse" }, como("p9")), ronda);
 	});
 
 	it("si alguien se va en mitad de la ronda, se vuelve a la sala", () => {
-		const despues = applyAction(jugando(4), { type: "salir" }, "p2");
+		const despues = applyAction(jugando(4), { type: "salir" }, como("p2"));
 		assert.equal(despues.phase, "sala");
 		assert.equal(despues.round, null);
 		assert.equal(despues.players.length, 3);
@@ -68,7 +74,7 @@ describe("entrar y salir de la sala", () => {
 describe("repartir", () => {
 	it("no reparte con menos jugadores del mínimo", () => {
 		const pocos = salaCon(MIN_PLAYERS - 1);
-		assert.equal(applyAction(pocos, { type: "repartir", seed: "S" }, "p0"), pocos);
+		assert.equal(applyAction(pocos, { type: "repartir", seed: "S" }, como("p0")), pocos);
 	});
 
 	it("reparte una localización del catálogo y un papel suyo a cada agente", () => {
@@ -133,7 +139,7 @@ describe("lo que ve cada jugador", () => {
 			assert.deepEqual(Object.keys(vista).sort(), CLAVES_DE_LA_VISTA);
 			// De los demás sólo se sabe cómo se llaman.
 			for (const otro of vista.players) {
-				assert.deepEqual(Object.keys(otro).sort(), ["id", "name"]);
+				assert.deepEqual(Object.keys(otro).sort(), ["avatar", "id", "name"]);
 			}
 		}
 	});
@@ -175,7 +181,7 @@ describe("lo que ve cada jugador", () => {
 	});
 
 	it("al destapar, todos ven la localización y el nombre del espía", () => {
-		const state = applyAction(jugando(5), { type: "revelar" }, "p0");
+		const state = applyAction(jugando(5), { type: "revelar" }, como("p0"));
 		const spyId = state.round?.spyIds[0] as string;
 		const spyName = state.players.find((p) => p.id === spyId)?.name;
 		for (const player of state.players) {
@@ -193,14 +199,14 @@ describe("lo que ve cada jugador", () => {
 describe("final de ronda", () => {
 	it("sólo se destapa una ronda en curso", () => {
 		const sala = salaCon(4);
-		assert.equal(applyAction(sala, { type: "revelar" }, "p0"), sala);
+		assert.equal(applyAction(sala, { type: "revelar" }, como("p0")), sala);
 	});
 
 	it("volver a la sala conserva a los jugadores y borra el reparto", () => {
 		const state = applyAction(
-			applyAction(jugando(5), { type: "revelar" }, "p0"),
+			applyAction(jugando(5), { type: "revelar" }, como("p0")),
 			{ type: "volver" },
-			"p0",
+			como("p0"),
 		);
 		assert.equal(state.phase, "sala");
 		assert.equal(state.round, null);

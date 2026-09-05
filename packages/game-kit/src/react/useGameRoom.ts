@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GameEngine } from "../engine.ts";
+import type { PlayerProfile } from "../profile.ts";
 import { parseServerMessage } from "../protocol.ts";
-import { readPlayerId } from "./player.ts";
 
 /** Cómo de conectada está esta pantalla con el resto del grupo. */
 export type RoomStatus =
@@ -41,6 +41,8 @@ export interface UseGameRoomOptions<State, Action, View> {
 	code: string;
 	/** Origen del servidor de salas. Sin él se juega en local. */
 	realtimeUrl?: string;
+	/** Quién es este móvil. Viaja con la conexión y con cada jugada. */
+	profile: PlayerProfile;
 }
 
 /** Reintento con espera creciente, para no martillear un servidor caído. */
@@ -58,8 +60,9 @@ export function useGameRoom<State, Action, View>({
 	game,
 	code,
 	realtimeUrl,
+	profile,
 }: UseGameRoomOptions<State, Action, View>): GameRoom<Action, View> {
-	const playerId = useMemo(() => readPlayerId(), []);
+	const playerId = profile.id;
 	const [view, setView] = useState<View>(() =>
 		project(engine, engine.create({ seed: code, now: Date.now() }), playerId),
 	);
@@ -71,6 +74,8 @@ export function useGameRoom<State, Action, View>({
 	// evita que `dispatch` cambie de identidad en cada render.
 	const engineRef = useRef(engine);
 	engineRef.current = engine;
+	const profileRef = useRef(profile);
+	profileRef.current = profile;
 
 	/**
 	 * El estado completo tal y como lo ve este móvil cuando no hay servidor.
@@ -102,7 +107,7 @@ export function useGameRoom<State, Action, View>({
 
 		const connect = () => {
 			if (cancelled) return;
-			const socket = new WebSocket(roomUrl(realtimeUrl, game, code, playerId));
+			const socket = new WebSocket(roomUrl(realtimeUrl, game, code, profileRef.current));
 			socketRef.current = socket;
 
 			socket.addEventListener("open", () => {
@@ -117,6 +122,11 @@ export function useGameRoom<State, Action, View>({
 				if (message?.type === "state") {
 					setView(message.state);
 					setSynced(true);
+					// Sin `project` la vista es el estado entero, así que también es el
+					// punto de partida de la siguiente jugada optimista. Sin esto, esa
+					// jugada se aplicaría sobre el tablero derivado del código, que no
+					// es el que repartió el servidor.
+					if (!engineRef.current.project) localRef.current = message.state as unknown as State;
 				}
 			});
 
@@ -156,7 +166,12 @@ export function useGameRoom<State, Action, View>({
 			const local = localRef.current;
 			if (!local) return;
 
-			const next = engine.apply(local, action, { seed: code, now: Date.now(), actorId: playerId });
+			const next = engine.apply(local, action, {
+				seed: code,
+				now: Date.now(),
+				actorId: playerId,
+				actor: profileRef.current,
+			});
 			localRef.current = next;
 
 			// Con secretos que repartir, el estado local no puede adivinar lo que el
@@ -179,11 +194,13 @@ function project<State, Action, View>(
 	return engine.project ? engine.project(state, actorId) : (state as unknown as View);
 }
 
-function roomUrl(base: string, game: string, code: string, playerId: string): string {
+function roomUrl(base: string, game: string, code: string, profile: PlayerProfile): string {
 	const url = new URL(`/room/${encodeURIComponent(game)}/${encodeURIComponent(code)}`, base);
-	// El identificador del móvil viaja en la conexión, no en cada mensaje: el
-	// servidor lo necesita desde el principio para saber a quién le habla.
-	url.searchParams.set("jugador", playerId);
+	// El perfil viaja en la conexión, no en cada mensaje: el servidor lo necesita
+	// desde el principio para saber a quién le habla y qué cara enseñar.
+	url.searchParams.set("jugador", profile.id);
+	url.searchParams.set("nombre", profile.name);
+	url.searchParams.set("avatar", profile.avatar);
 	// Aceptamos la URL con esquema http(s) porque es lo que se escribe en un .env.
 	if (url.protocol === "https:") url.protocol = "wss:";
 	else if (url.protocol === "http:") url.protocol = "ws:";

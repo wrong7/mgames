@@ -1,4 +1,10 @@
-import { parseClientMessage, randomCode, type ServerMessage } from "@mgames/game-kit";
+import {
+	type PlayerProfile,
+	parseClientMessage,
+	parseProfile,
+	randomCode,
+	type ServerMessage,
+} from "@mgames/game-kit";
 import { type AnyEngine, findEngine } from "./engines.ts";
 
 /**
@@ -43,9 +49,16 @@ export class GameRoom implements DurableObject {
 
 		const url = new URL(request.url);
 		const game = url.searchParams.get("juego") ?? "";
-		const playerId = url.searchParams.get("jugador") ?? "";
 		if (!findEngine(game)) {
 			return new Response("Juego desconocido", { status: 404 });
+		}
+		const profile = parseProfile({
+			id: url.searchParams.get("jugador"),
+			name: url.searchParams.get("nombre"),
+			avatar: url.searchParams.get("avatar"),
+		});
+		if (!profile) {
+			return new Response("Falta el perfil del jugador", { status: 400 });
 		}
 
 		const pair = new WebSocketPair();
@@ -53,15 +66,19 @@ export class GameRoom implements DurableObject {
 
 		// Hibernación: Cloudflare puede descargar el objeto de memoria mientras
 		// nadie habla y devolvérnoslo con los sockets intactos cuando llegue un
-		// mensaje. La etiqueta sobrevive a eso, así que es donde guardamos quién es
-		// cada conexión.
-		this.ctx.acceptWebSocket(server, [`jugador:${playerId}`]);
+		// mensaje. El adjunto del socket sobrevive a eso, así que es donde va quién
+		// hay al otro lado de cada conexión.
+		this.ctx.acceptWebSocket(server);
+		server.serializeAttachment(profile);
 
 		const room = await this.#load(game);
 		// `game` está validado justo arriba, así que la sala existe o se acaba de
 		// crear; el `if` es para el compilador, no para un caso real.
 		if (room) {
-			send(server, { type: "state", state: viewFor(findEngine(room.game), room.state, playerId) });
+			send(server, {
+				type: "state",
+				state: viewFor(findEngine(room.game), room.state, profile.id),
+			});
 		}
 
 		return new Response(null, { status: 101, webSocket: client });
@@ -88,8 +105,14 @@ export class GameRoom implements DurableObject {
 			return;
 		}
 
+		const actor = profileOf(ws);
+		if (!actor) {
+			send(ws, { type: "error", message: "Conexión sin perfil" });
+			return;
+		}
+
 		if (message.type === "hello") {
-			send(ws, { type: "state", state: viewFor(engine, room.state, this.#playerIdOf(ws)) });
+			send(ws, { type: "state", state: viewFor(engine, room.state, actor.id) });
 			return;
 		}
 
@@ -102,7 +125,8 @@ export class GameRoom implements DurableObject {
 		const next = engine.apply(room.state, action, {
 			seed: room.seed,
 			now: Date.now(),
-			actorId: this.#playerIdOf(ws),
+			actorId: actor.id,
+			actor,
 		});
 		// Una jugada imposible (carta ya destapada, partida terminada) devuelve el
 		// mismo estado. No es un error —dos móviles pueden tocar la misma carta a la
@@ -166,12 +190,6 @@ export class GameRoom implements DurableObject {
 		await this.ctx.storage.setAlarm(Date.now() + TTL_MS);
 	}
 
-	/** Quién hay al otro lado de este socket, según la etiqueta puesta al aceptarlo. */
-	#playerIdOf(ws: WebSocket): string {
-		const tag = this.ctx.getTags(ws).find((t) => t.startsWith("jugador:"));
-		return tag ? tag.slice("jugador:".length) : "";
-	}
-
 	/**
 	 * Manda el estado a todos, cada uno con lo suyo.
 	 *
@@ -181,9 +199,15 @@ export class GameRoom implements DurableObject {
 	 */
 	#broadcast(engine: AnyEngine, state: unknown): void {
 		for (const socket of this.ctx.getWebSockets()) {
-			send(socket, { type: "state", state: viewFor(engine, state, this.#playerIdOf(socket)) });
+			const actorId = profileOf(socket)?.id ?? "";
+			send(socket, { type: "state", state: viewFor(engine, state, actorId) });
 		}
 	}
+}
+
+/** Quién hay al otro lado de este socket, según lo adjuntado al aceptarlo. */
+function profileOf(ws: WebSocket): PlayerProfile | null {
+	return parseProfile(ws.deserializeAttachment());
 }
 
 function viewFor(engine: AnyEngine | undefined, state: unknown, actorId: string): unknown {

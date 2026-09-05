@@ -6,13 +6,15 @@ import type { GameAction, GameState } from "./types.ts";
 /**
  * Código Secreto visto por el servidor de salas.
  *
- * No usa `actorId`: en este juego cualquiera de la mesa puede destapar cualquier
- * carta, igual que cualquiera puede alargar la mano sobre el tablero de cartón.
- * Quién puede tocar qué lo arregla la gente hablando, no el software.
+ * El actor importa para los votos —cada ficha lleva la cara de quien la puso—
+ * pero no para destapar: el servidor no sabe quién es jefe y quién agente,
+ * porque el papel se elige en la pantalla. Que un agente no destape lo
+ * garantiza su interfaz, que no le ofrece el gesto; lo que sí garantiza el
+ * motor es que nadie vote una carta ya destapada ni con la partida acabada.
  */
 export const engine: GameEngine<GameState, GameAction> = {
 	create: ({ seed, now }) => createGame(seed, now),
-	apply: (state, action, { now }) => applyAction(state, action, now),
+	apply: (state, action, { actor, now }) => applyAction(state, action, actor, now),
 	parseAction,
 };
 
@@ -21,6 +23,7 @@ function parseAction(value: unknown): GameAction | null {
 	const action = value as Record<string, unknown>;
 
 	switch (action.type) {
+		case "vote":
 		case "reveal":
 		case "unreveal":
 			return isCardIndex(action.index) ? { type: action.type, index: action.index } : null;

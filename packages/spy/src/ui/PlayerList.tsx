@@ -1,3 +1,4 @@
+import { Avatar } from "@mgames/game-kit/react";
 import type { SpyPlayer } from "../engine/index.ts";
 import { COLORS } from "../theme.ts";
 
@@ -19,19 +20,23 @@ export function PlayerList({ players, meId }: PlayerListProps) {
 
 	return (
 		<ul className="flex flex-wrap justify-center gap-1.5">
-			{players.map((player) => (
-				<li
-					key={player.id}
-					className="rounded-full px-3 py-1 text-sm"
-					style={{
-						backgroundColor: player.id === meId ? COLORS.gold : COLORS.slate,
-						color: player.id === meId ? COLORS.night : COLORS.ink,
-						fontWeight: player.id === meId ? 700 : 400,
-					}}
-				>
-					{player.name}
-				</li>
-			))}
+			{players.map((player) => {
+				const me = player.id === meId;
+				return (
+					<li
+						key={player.id}
+						className="flex items-center gap-1.5 rounded-full py-1 pr-3 pl-1 text-sm"
+						style={{
+							backgroundColor: me ? COLORS.gold : COLORS.slate,
+							color: me ? COLORS.night : COLORS.ink,
+							fontWeight: me ? 700 : 400,
+						}}
+					>
+						<Avatar seed={player.avatar} size={22} className="block" />
+						{player.name}
+					</li>
+				);
+			})}
 		</ul>
 	);
 }

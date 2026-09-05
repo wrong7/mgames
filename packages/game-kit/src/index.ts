@@ -10,6 +10,12 @@ export { CODE_LENGTH, isCompleteCode, normalizeCode, randomCode } from "./code.t
 export type { ActorContext, EngineContext, GameEngine } from "./engine.ts";
 export type { GameManifest } from "./manifest.ts";
 export {
+	MAX_NAME_LENGTH,
+	normalizeName,
+	type PlayerProfile,
+	parseProfile,
+} from "./profile.ts";
+export {
 	type ClientMessage,
 	parseClientMessage,
 	parseServerMessage,

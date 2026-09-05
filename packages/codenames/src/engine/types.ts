@@ -22,10 +22,26 @@ export interface Board {
  * exactamente este tipo y el mismo reducer, así que no hay dos versiones de las
  * reglas que puedan divergir.
  */
+/** Un agente señalando una carta: "yo diría ésta". */
+export interface Vote {
+	/** Carta señalada. */
+	index: number;
+	/** Nombre y cara de quien vota, para pintar la ficha sobre la carta. */
+	name: string;
+	avatar: string;
+}
+
 export interface GameState {
 	board: Board;
 	/** 25 booleanos: qué cartas se han destapado ya. */
 	revealed: readonly boolean[];
+	/**
+	 * Voto de cada jugador, por identificador de móvil. Uno por persona: votar
+	 * otra carta mueve la ficha, votar la misma la retira. Los agentes no destapan
+	 * nada —eso lo hace el jefe—, así que esto es su única forma de "tocar" el
+	 * tablero.
+	 */
+	votes: Readonly<Record<string, Vote>>;
 	/** Equipo al que le toca dar pista. */
 	turn: Team;
 	/** Equipo ganador, o `null` si la partida sigue en juego. */
@@ -38,7 +54,9 @@ export interface GameState {
 
 /** Las acciones que un jugador puede provocar. */
 export type GameAction =
-	/** Destapar una carta. Es la única jugada real del juego. */
+	/** Señalar una carta (o dejar de señalarla). Lo hacen los agentes. */
+	| { type: "vote"; index: number }
+	/** Destapar una carta. Lo hace el jefe, cuando su equipo se decide. */
 	| { type: "reveal"; index: number }
 	/** Volver a tapar una carta: en el móvil se toca donde no se quiere. */
 	| { type: "unreveal"; index: number }

@@ -1,4 +1,5 @@
-import type { CardKind } from "../engine/index.ts";
+import { Avatar } from "@mgames/game-kit/react";
+import type { CardKind, Vote } from "../engine/index.ts";
 import { COLORS } from "../theme.ts";
 
 /** Fondo y color de texto de cada tipo de carta, ya emparejados para que contrasten. */
@@ -9,11 +10,18 @@ const FACE: Record<CardKind, { background: string; color: string }> = {
 	asesino: { background: COLORS.asesino, color: "#e8e4d8" },
 };
 
+/** Cuántas caras caben en una carta antes de resumir el resto en un número. */
+const MAX_VISIBLE_VOTES = 3;
+
 export interface CardProps {
 	word: string;
 	/** El tipo de la carta, o `null` para dejarla boca abajo (vista de agentes). */
 	kind: CardKind | null;
 	revealed: boolean;
+	/** Quiénes están señalando esta carta. */
+	votes?: readonly Vote[];
+	/** Si la ficha de quien mira está aquí, para que sepa que puede retirarla. */
+	mine?: boolean;
 	onClick?: () => void;
 	disabled?: boolean;
 }
@@ -25,7 +33,7 @@ export interface CardProps {
  * escala fija: así "DINOSAURIO" y "SAL" caben las dos en la misma rejilla de
  * cinco columnas tanto en un móvil estrecho como en horizontal.
  */
-export function Card({ word, kind, revealed, onClick, disabled }: CardProps) {
+export function Card({ word, kind, revealed, votes = [], mine, onClick, disabled }: CardProps) {
 	const face = kind ? FACE[kind] : { background: "#ffffff", color: "#1c1c1c" };
 
 	return (
@@ -41,6 +49,9 @@ export function Card({ word, kind, revealed, onClick, disabled }: CardProps) {
 				"select-none active:scale-[0.97]",
 				revealed ? "opacity-45" : "opacity-100",
 				disabled ? "cursor-default" : "cursor-pointer",
+				// Tu propia ficha se marca con un aro: en un tablero con varias caras
+				// pequeñas cuesta encontrar la tuya de un vistazo.
+				mine ? "ring-3 ring-black/80" : "",
 			].join(" ")}
 			style={{
 				backgroundColor: face.background,
@@ -50,7 +61,39 @@ export function Card({ word, kind, revealed, onClick, disabled }: CardProps) {
 		>
 			{word}
 			{revealed && <RevealedMark color={face.color} />}
+			{votes.length > 0 && <VoteChips votes={votes} />}
 		</button>
+	);
+}
+
+/**
+ * Las caras de quienes señalan la carta, apiladas en la esquina.
+ *
+ * Es lo que ve el jefe para saber por dónde va su equipo sin que nadie diga
+ * la palabra en voz alta, y lo que ve el resto de la mesa para discutir.
+ */
+function VoteChips({ votes }: { votes: readonly Vote[] }) {
+	const visible = votes.slice(0, MAX_VISIBLE_VOTES);
+	const rest = votes.length - visible.length;
+
+	return (
+		<span className="pointer-events-none absolute -top-1 -right-1 flex items-center">
+			{visible.map((vote, i) => (
+				<span
+					key={`${vote.name}-${i}`}
+					className="rounded-full bg-white ring-2 ring-white"
+					// Solapadas como fichas de póquer: cada una tapa un poco la anterior.
+					style={{ marginLeft: i === 0 ? 0 : "-0.45rem", zIndex: visible.length - i }}
+				>
+					<Avatar seed={vote.avatar} name={vote.name} size={24} className="block" />
+				</span>
+			))}
+			{rest > 0 && (
+				<span className="-ml-1 rounded-full bg-black px-1.5 text-[0.55rem] font-bold text-white ring-2 ring-white">
+					+{rest}
+				</span>
+			)}
+		</span>
 	);
 }
 

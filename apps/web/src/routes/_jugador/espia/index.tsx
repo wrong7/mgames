@@ -2,9 +2,10 @@ import { normalizeCode, randomCode } from "@mgames/game-kit";
 import { SpyScreen } from "@mgames/spy";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { REALTIME_URL } from "../../config.ts";
+import { REALTIME_URL } from "../../../config.ts";
+import { useCurrentProfile } from "../../../profile.tsx";
 
-export const Route = createFileRoute("/espia/")({
+export const Route = createFileRoute("/_jugador/espia/")({
 	// El código vive en la URL para poder compartir el enlace de la sala además
 	// de dictarlo en voz alta.
 	validateSearch: (search: Record<string, unknown>): { sala?: string } => {
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/espia/")({
 function Espia() {
 	const { sala } = Route.useSearch();
 	const navigate = useNavigate({ from: Route.fullPath });
+	const profile = useCurrentProfile();
 
 	// Entrar sin código propone uno nuevo. Va con `replace` para que el botón de
 	// atrás salga al catálogo y no vuelva aquí.
@@ -28,5 +30,12 @@ function Espia() {
 	// propio juego, porque hay que ver quién va entrando.
 	if (!sala) return null;
 
-	return <SpyScreen code={sala} realtimeUrl={REALTIME_URL} onExit={() => navigate({ to: "/" })} />;
+	return (
+		<SpyScreen
+			code={sala}
+			realtimeUrl={REALTIME_URL}
+			profile={profile}
+			onExit={() => navigate({ to: "/" })}
+		/>
+	);
 }

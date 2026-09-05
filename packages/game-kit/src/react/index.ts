@@ -5,7 +5,15 @@
  * código puro: el servidor de salas lo importa desde un Worker, donde no existen
  * `document` ni `navigator`.
  */
-export { readPlayerId } from "./player.ts";
+export { Avatar, type AvatarProps } from "./Avatar.tsx";
+export {
+	draftProfile,
+	type ProfileStore,
+	readProfile,
+	rerollAvatar,
+	saveProfile,
+	useProfile,
+} from "./profile.ts";
 export {
 	type GameRoom,
 	type RoomStatus,

@@ -11,6 +11,8 @@ export interface SpyPlayer {
 	/** El identificador del móvil. */
 	id: string;
 	name: string;
+	/** Semilla de su cara, para pintarla en la lista. */
+	avatar: string;
 }
 
 /**
@@ -55,8 +57,8 @@ export interface SpyView {
 }
 
 export type SpyAction =
-	/** Entrar en la sala, o cambiarse el nombre. */
-	| { type: "unirse"; name: string }
+	/** Entrar en la sala. El nombre y la cara vienen con quien envía la acción. */
+	| { type: "unirse" }
 	/** Salir de la sala (alguien se va a casa). */
 	| { type: "salir" }
 	/** Repartir una ronda nueva. La semilla la pone quien reparte. */

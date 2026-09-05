@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { PlayerProfile } from "@mgames/game-kit";
 import { buildBoard, CARD_COUNT, remainingFor } from "./board.ts";
-import { applyAction, createGame } from "./state.ts";
-import type { CardKind, GameState, Team } from "./types.ts";
+import { applyAction as applyAs, createGame } from "./state.ts";
+import type { CardKind, GameAction, GameState, Team } from "./types.ts";
 import { WORDS } from "./words.ts";
 
 /** Índice de la primera carta de un tipo dado. */
 const find = (state: GameState, kind: CardKind) => state.board.kinds.indexOf(kind);
 
 const other = (team: Team): Team => (team === "azul" ? "rojo" : "azul");
+
+const ana: PlayerProfile = { id: "ana", name: "Ana", avatar: "cara-ana" };
+const bea: PlayerProfile = { id: "bea", name: "Bea", avatar: "cara-bea" };
+
+/** La mayoría de jugadas no dependen de quién las hace; ésta es la de por defecto. */
+const applyAction = (state: GameState, action: GameAction, actor: PlayerProfile = ana) =>
+	applyAs(state, action, actor);
 
 describe("reparto", () => {
 	it("da 25 palabras distintas de la baraja", () => {
@@ -139,5 +147,57 @@ describe("turno y reparto", () => {
 		assert.equal(nueva.winner, null);
 		assert.notDeepEqual(nueva.board.words, game.board.words);
 		assert.equal(nueva.turn, nueva.board.startingTeam);
+	});
+});
+
+describe("votos", () => {
+	const game = createGame("VOTOS");
+	const vote = (state: GameState, index: number, actor: PlayerProfile) =>
+		applyAction(state, { type: "vote", index }, actor);
+
+	it("señalar una carta pone la ficha de quien vota, con su nombre y su cara", () => {
+		const state = vote(game, 3, ana);
+		assert.deepEqual(state.votes, { ana: { index: 3, name: "Ana", avatar: "cara-ana" } });
+	});
+
+	it("cada jugador tiene una sola ficha: votar otra carta la mueve", () => {
+		const state = vote(vote(game, 3, ana), 7, ana);
+		assert.deepEqual(state.votes, { ana: { index: 7, name: "Ana", avatar: "cara-ana" } });
+	});
+
+	it("volver a señalar la misma carta retira la ficha", () => {
+		const state = vote(vote(game, 3, ana), 3, ana);
+		assert.deepEqual(state.votes, {});
+	});
+
+	it("varios jugadores pueden señalar la misma carta", () => {
+		const state = vote(vote(game, 3, ana), 3, bea);
+		assert.equal(Object.keys(state.votes).length, 2);
+	});
+
+	it("no se vota una carta ya destapada ni con la partida acabada", () => {
+		const destapada = applyAction(game, { type: "reveal", index: 3 });
+		assert.equal(vote(destapada, 3, ana), destapada);
+		const acabada = applyAction(game, { type: "reveal", index: find(game, "asesino") });
+		assert.equal(vote(acabada, 0, ana), acabada);
+	});
+
+	it("destapar una carta propia retira sólo las fichas de esa carta", () => {
+		const propia = find(game, game.turn);
+		const state = vote(vote(game, propia, ana), 9, bea);
+		const next = applyAction(state, { type: "reveal", index: propia });
+		assert.deepEqual(Object.keys(next.votes), ["bea"]);
+	});
+
+	it("destapar una carta que cierra el turno retira todas las fichas", () => {
+		const state = vote(vote(game, find(game, "neutral"), ana), 9, bea);
+		const next = applyAction(state, { type: "reveal", index: find(game, "neutral") });
+		assert.deepEqual(next.votes, {});
+	});
+
+	it("pasar turno y repartir de nuevo limpian las fichas", () => {
+		const state = vote(game, 3, ana);
+		assert.deepEqual(applyAction(state, { type: "endTurn" }).votes, {});
+		assert.deepEqual(applyAction(state, { type: "restart", seed: "X" }).votes, {});
 	});
 });

@@ -12,6 +12,7 @@ export type {
 	GameAction,
 	GameState,
 	Team,
+	Vote,
 } from "./engine/index.ts";
 export {
 	applyAction,
