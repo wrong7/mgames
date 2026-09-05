@@ -7,7 +7,7 @@
  * para que el servidor de salas pueda importarlo tal cual.
  */
 export { CODE_LENGTH, isCompleteCode, normalizeCode, randomCode } from "./code.ts";
-export type { ActorContext, EngineContext, GameEngine } from "./engine.ts";
+export type { ActorContext, AnyEngine, EngineContext, GameEngine } from "./engine.ts";
 export type { GameManifest } from "./manifest.ts";
 export {
 	MAX_NAME_LENGTH,
@@ -22,3 +22,11 @@ export {
 	type ServerMessage,
 } from "./protocol.ts";
 export { createRng, type Rng } from "./rng.ts";
+export {
+	type GameScreenProps,
+	hostOf,
+	parseRoomAction,
+	type RoomAction,
+	type RoomState,
+	type RoomView,
+} from "./room.ts";

@@ -1,16 +1,15 @@
 import type { GameEngine } from "@mgames/game-kit";
 import { CARD_COUNT } from "./board.ts";
 import { applyAction, createGame } from "./state.ts";
-import type { GameAction, GameState } from "./types.ts";
+import type { GameAction, GameState, Role, Team } from "./types.ts";
 
 /**
  * Código Secreto visto por el servidor de salas.
  *
- * El actor importa para los votos —cada ficha lleva la cara de quien la puso—
- * pero no para destapar: el servidor no sabe quién es jefe y quién agente,
- * porque el papel se elige en la pantalla. Que un agente no destape lo
- * garantiza su interfaz, que no le ofrece el gesto; lo que sí garantiza el
- * motor es que nadie vote una carta ya destapada ni con la partida acabada.
+ * Aquí no hay secretos que proyectar: quien se sienta de jefe ha decidido ver la
+ * clave. Lo que sí hace cumplir el motor es el asiento: sólo el jefe del equipo
+ * en turno destapa y sólo sus agentes señalan, aunque otra pantalla intente
+ * mandar la jugada.
  */
 export const engine: GameEngine<GameState, GameAction> = {
 	create: ({ seed, now }) => createGame(seed, now),
@@ -23,6 +22,12 @@ function parseAction(value: unknown): GameAction | null {
 	const action = value as Record<string, unknown>;
 
 	switch (action.type) {
+		case "sit":
+			return isTeam(action.team) && isRole(action.role)
+				? { type: "sit", team: action.team, role: action.role }
+				: null;
+		case "stand":
+			return { type: "stand" };
 		case "vote":
 		case "reveal":
 		case "unreveal":
@@ -36,6 +41,14 @@ function parseAction(value: unknown): GameAction | null {
 		default:
 			return null;
 	}
+}
+
+function isTeam(value: unknown): value is Team {
+	return value === "azul" || value === "rojo";
+}
+
+function isRole(value: unknown): value is Role {
+	return value === "jefe" || value === "agente";
 }
 
 function isCardIndex(value: unknown): value is number {

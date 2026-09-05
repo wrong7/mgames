@@ -3,9 +3,9 @@ import { LOCATION_NAMES, LOCATIONS } from "./locations.ts";
 import { MAX_PLAYERS, MIN_PLAYERS, spyCountFor } from "./rules.ts";
 import type { Card, Round, SpyAction, SpyPlayer, SpyState, SpyView } from "./types.ts";
 
-/** Una sala vacía, esperando a que llegue la gente. */
+/** Sobre la mesa, sin repartir. */
 export function createGame(_seed: string, now: number = Date.now()): SpyState {
-	return { phase: "sala", players: [], round: null, updatedAt: now };
+	return { phase: "sala", round: null, updatedAt: now };
 }
 
 /**
@@ -27,6 +27,7 @@ export function deal(players: readonly SpyPlayer[], seed: string): Round {
 	const roles = rng.sample(location.roles, agents.length);
 
 	return {
+		participants: players.map(({ id, name, avatar }) => ({ id, name, avatar })),
 		location: location.name,
 		spyIds: spies.map((player) => player.id),
 		roles: Object.fromEntries(agents.map((player, i) => [player.id, roles[i] as string])),
@@ -43,54 +44,22 @@ export function deal(players: readonly SpyPlayer[], seed: string): Round {
 export function applyAction(
 	state: SpyState,
 	action: SpyAction,
-	actor: PlayerProfile,
+	players: readonly PlayerProfile[],
 	now: number = Date.now(),
 ): SpyState {
-	const actorId = actor.id;
 	switch (action.type) {
-		case "unirse": {
-			const player: SpyPlayer = { id: actor.id, name: actor.name, avatar: actor.avatar };
-
-			const existing = state.players.find((p) => p.id === actorId);
-			// Volver a entrar con el mismo móvil no crea un jugador nuevo: es el que
-			// recargó la página, volvió de bloquear la pantalla o se cambió de cara.
-			if (existing) {
-				if (existing.name === player.name && existing.avatar === player.avatar) return state;
-				return {
-					...state,
-					players: state.players.map((p) => (p.id === actorId ? player : p)),
-					updatedAt: now,
-				};
-			}
-
-			// Con la ronda empezada no entra nadie: le tocaría una carta que no existe.
-			if (state.phase !== "sala" || state.players.length >= MAX_PLAYERS) return state;
-
-			return { ...state, players: [...state.players, player], updatedAt: now };
-		}
-
-		case "salir": {
-			if (!state.players.some((player) => player.id === actorId)) return state;
-			const players = state.players.filter((player) => player.id !== actorId);
-			// Si se va alguien en mitad de la ronda, el reparto deja de tener sentido:
-			// se vuelve a la sala en lugar de dejar una partida coja.
-			return {
-				...state,
-				players,
-				phase: state.phase === "jugando" ? "sala" : state.phase,
-				round: state.phase === "jugando" ? null : state.round,
-				updatedAt: now,
-			};
-		}
-
 		case "repartir": {
-			if (state.players.length < MIN_PLAYERS || !action.seed) return state;
-			return {
-				...state,
-				phase: "jugando",
-				round: deal(state.players, action.seed),
-				updatedAt: now,
-			};
+			// Se reparte a quien esté en la sala ahora mismo, dentro de los límites del
+			// juego. Con la ronda empezada no se vuelve a repartir: primero se destapa.
+			if (
+				state.phase === "jugando" ||
+				players.length < MIN_PLAYERS ||
+				players.length > MAX_PLAYERS ||
+				!action.seed
+			) {
+				return state;
+			}
+			return { phase: "jugando", round: deal(players, action.seed), updatedAt: now };
 		}
 
 		case "revelar": {
@@ -100,7 +69,7 @@ export function applyAction(
 
 		case "volver": {
 			if (state.phase === "sala") return state;
-			return { ...state, phase: "sala", round: null, updatedAt: now };
+			return { phase: "sala", round: null, updatedAt: now };
 		}
 	}
 }
@@ -115,27 +84,26 @@ export function applyAction(
 export function project(state: SpyState, actorId: string): SpyView {
 	const base = {
 		phase: state.phase,
-		players: state.players,
 		locations: LOCATION_NAMES,
 		updatedAt: state.updatedAt,
 	};
 
 	if (!state.round || state.phase === "sala") {
-		return { ...base, card: null, reveal: null };
+		return { ...base, participants: [], card: null, reveal: null };
 	}
 
-	if (state.phase === "revelado") {
-		const spyNames = state.round.spyIds.map(
-			(id) => state.players.find((player) => player.id === id)?.name ?? "alguien",
-		);
-		return {
-			...base,
-			card: cardFor(state.round, actorId),
-			reveal: { location: state.round.location, spyNames },
-		};
-	}
+	const round = state.round;
+	const reveal =
+		state.phase === "revelado"
+			? {
+					location: round.location,
+					spyNames: round.spyIds.map(
+						(id) => round.participants.find((p) => p.id === id)?.name ?? "alguien",
+					),
+				}
+			: null;
 
-	return { ...base, card: cardFor(state.round, actorId), reveal: null };
+	return { ...base, participants: round.participants, card: cardFor(round, actorId), reveal };
 }
 
 function cardFor(round: Round, actorId: string): Card | null {

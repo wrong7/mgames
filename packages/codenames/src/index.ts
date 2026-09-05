@@ -11,8 +11,9 @@ export type {
 	CardKind,
 	GameAction,
 	GameState,
+	Role,
+	Seat,
 	Team,
-	Vote,
 } from "./engine/index.ts";
 export {
 	applyAction,

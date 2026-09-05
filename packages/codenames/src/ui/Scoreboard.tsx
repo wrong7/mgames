@@ -1,4 +1,3 @@
-import type { RoomStatus } from "@mgames/game-kit/react";
 import { type Board, remainingFor, type Team } from "../engine/index.ts";
 import { COLORS } from "../theme.ts";
 
@@ -7,7 +6,7 @@ export interface ScoreboardProps {
 	revealed: readonly boolean[];
 	turn: Team;
 	code: string;
-	status: RoomStatus;
+	live: boolean;
 }
 
 /**
@@ -17,7 +16,7 @@ export interface ScoreboardProps {
  * Todo eso cabe en dos líneas para no robarle alto a la rejilla, que es lo que
  * de verdad hay que mirar.
  */
-export function Scoreboard({ board, revealed, turn, code, status }: ScoreboardProps) {
+export function Scoreboard({ board, revealed, turn, code, live }: ScoreboardProps) {
 	return (
 		<div className="flex shrink-0 items-stretch gap-1.5 text-white">
 			<TeamCount
@@ -27,7 +26,7 @@ export function Scoreboard({ board, revealed, turn, code, status }: ScoreboardPr
 			/>
 			<div className="flex flex-col items-center justify-center rounded-xl bg-black/80 px-3 py-1.5">
 				<span className="font-mono text-lg leading-none font-bold tracking-[0.2em]">{code}</span>
-				<ConnectionHint status={status} />
+				<ConnectionHint live={live} />
 			</div>
 			<TeamCount
 				team="rojo"
@@ -56,14 +55,13 @@ function TeamCount({ team, count, active }: { team: Team; count: number; active:
 	);
 }
 
-function ConnectionHint({ status }: { status: RoomStatus }) {
-	const label =
-		status === "conectado" ? "en vivo" : status === "conectando" ? "conectando…" : "sin conexión";
+function ConnectionHint({ live }: { live: boolean }) {
+	const label = live ? "en vivo" : "sin conexión";
 	return (
 		<span className="mt-0.5 flex items-center gap-1 text-[0.55rem] uppercase tracking-widest opacity-70">
 			<span
 				className="inline-block size-1.5 rounded-full"
-				style={{ backgroundColor: status === "conectado" ? "#4ade80" : "#fbbf24" }}
+				style={{ backgroundColor: live ? "#4ade80" : "#fbbf24" }}
 			/>
 			{label}
 		</span>

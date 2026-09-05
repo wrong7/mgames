@@ -1,48 +1,23 @@
-import { type PlayerProfile, randomCode } from "@mgames/game-kit";
-import { type RoomStatus, useGameRoom, useWakeLock } from "@mgames/game-kit/react";
-import { useEffect } from "react";
-import { engine, MIN_PLAYERS, type SpyView } from "../engine/index.ts";
+import type { GameScreenProps, PlayerProfile } from "@mgames/game-kit";
+import { randomCode } from "@mgames/game-kit";
+import { useWakeLock } from "@mgames/game-kit/react";
+import { MAX_PLAYERS, MIN_PLAYERS, type SpyAction, type SpyView } from "../engine/index.ts";
 import { manifest } from "../manifest.ts";
 import { COLORS } from "../theme.ts";
 import { LocationList } from "./LocationList.tsx";
 import { PlayerList } from "./PlayerList.tsx";
 import { RoleCard } from "./RoleCard.tsx";
 
-export interface SpyScreenProps {
-	/** Código de la sala: lo que los jugadores se dictan en voz alta. */
-	code: string;
-	/** Origen del servidor de salas. Sin él este juego no se puede jugar. */
-	realtimeUrl?: string;
-	/** Quién es este móvil. Entra en la sala con este nombre y esta cara. */
-	profile: PlayerProfile;
-	onExit?: () => void;
-}
+export type SpyScreenProps = GameScreenProps<SpyView, SpyAction>;
 
 /**
  * El juego entero, en una pantalla que cambia según la fase.
  *
- * A diferencia de Código Secreto, aquí no hay dos vistas que elegir: cada móvil
- * es un jugador y lo que ve depende de lo que le haya tocado.
+ * No hay asientos ni papeles que elegir: se reparte a quien esté en la sala y
+ * lo que ve cada uno depende de lo que le haya tocado.
  */
-export function SpyScreen({ code, realtimeUrl, profile, onExit }: SpyScreenProps) {
-	const { view, status, synced, playerId, dispatch } = useGameRoom({
-		engine,
-		game: manifest.slug,
-		code,
-		realtimeUrl,
-		profile,
-	});
+export function SpyScreen({ code, profile, players, live, view, play, onExit }: SpyScreenProps) {
 	useWakeLock();
-
-	const me = view.players.find((player) => player.id === playerId);
-
-	// Entrar en la sala es automático: el perfil ya dice quién eres, así que no
-	// hay nada que preguntar. Se reintenta con cada estado nuevo por si la sala
-	// estaba en mitad de una ronda al llegar y se abre después.
-	const canJoin = status === "conectado" && synced && !me && view.phase === "sala";
-	useEffect(() => {
-		if (canJoin) dispatch({ type: "unirse" });
-	}, [canJoin, dispatch]);
 
 	return (
 		<div
@@ -54,14 +29,8 @@ export function SpyScreen({ code, realtimeUrl, profile, onExit }: SpyScreenProps
 				paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
 			}}
 		>
-			<Header code={code} status={status} onExit={onExit} />
-			<Body
-				view={view}
-				status={status}
-				playerId={playerId}
-				joined={me !== undefined}
-				dispatch={dispatch}
-			/>
+			<Header code={code} live={live} onExit={onExit} />
+			<Body view={view} players={players} profile={profile} play={play} />
 		</div>
 	);
 }
@@ -69,54 +38,33 @@ export function SpyScreen({ code, realtimeUrl, profile, onExit }: SpyScreenProps
 /** Qué se enseña ahora mismo, que es lo único que cambia entre fases. */
 function Body({
 	view,
-	status,
-	playerId,
-	joined,
-	dispatch,
+	players,
+	profile,
+	play,
 }: {
 	view: SpyView;
-	status: RoomStatus;
-	playerId: string;
-	joined: boolean;
-	dispatch: (action: Parameters<typeof engine.apply>[1]) => void;
+	players: readonly PlayerProfile[];
+	profile: PlayerProfile;
+	play: (action: SpyAction) => void;
 }) {
-	// Sin sala compartida no hay reparto que valga: este juego consiste justamente
-	// en que cada móvil reciba algo distinto.
-	if (status === "local") return <Disconnected />;
-
-	// Sin estar dentro no hay nada que hacer: o la sala está en mitad de una
-	// ronda, o el servidor aún no ha contestado al "unirse".
-	if (!joined) return <Outside view={view} />;
-
 	if (view.phase === "sala") {
 		return (
 			<Waiting
-				view={view}
-				meId={playerId}
-				onDeal={() => dispatch({ type: "repartir", seed: randomCode(12) })}
+				players={players}
+				meId={profile.id}
+				onDeal={() => play({ type: "repartir", seed: randomCode(12) })}
 			/>
 		);
 	}
 
 	if (view.phase === "revelado" && view.reveal) {
-		return <Revealed reveal={view.reveal} onBack={() => dispatch({ type: "volver" })} />;
+		return <Revealed reveal={view.reveal} onBack={() => play({ type: "volver" })} />;
 	}
 
-	return <Playing view={view} meId={playerId} onReveal={() => dispatch({ type: "revelar" })} />;
+	return <Playing view={view} meId={profile.id} onReveal={() => play({ type: "revelar" })} />;
 }
 
-function Header({
-	code,
-	status,
-	onExit,
-}: {
-	code: string;
-	status: RoomStatus;
-	onExit?: () => void;
-}) {
-	const hint =
-		status === "conectado" ? "en vivo" : status === "conectando" ? "conectando…" : "sin conexión";
-
+function Header({ code, live, onExit }: { code: string; live: boolean; onExit?: () => void }) {
 	return (
 		<header className="flex shrink-0 items-center gap-2">
 			{onExit && (
@@ -125,14 +73,16 @@ function Header({
 					onClick={onExit}
 					className="rounded-xl px-3 py-2 active:scale-95"
 					style={{ backgroundColor: COLORS.slate }}
-					aria-label="Volver al catálogo"
+					aria-label="Recoger el juego"
 				>
 					←
 				</button>
 			)}
 			<div className="flex-1 text-center">
 				<p className="font-mono text-xl font-black tracking-[0.25em]">{code}</p>
-				<p className="text-[0.55rem] uppercase tracking-[0.25em] opacity-60">{hint}</p>
+				<p className="text-[0.55rem] uppercase tracking-[0.25em] opacity-60">
+					{live ? "en vivo" : "sin conexión"}
+				</p>
 			</div>
 			{/* Hueco simétrico al botón de volver, para que el código quede centrado. */}
 			{onExit && <div className="w-11" aria-hidden="true" />}
@@ -140,36 +90,17 @@ function Header({
 	);
 }
 
-function Disconnected() {
-	return (
-		<div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-			<p className="text-2xl font-black uppercase tracking-tight">Sin conexión</p>
-			<p className="max-w-[26ch] text-sm opacity-70">
-				El Espía necesita que los móviles hablen entre ellos: es el servidor quien reparte las
-				cartas para que nadie vea la de los demás.
-			</p>
-		</div>
-	);
-}
-
-function Outside({ view }: { view: SpyView }) {
-	const inRound = view.phase !== "sala";
-	return (
-		<div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-			<p className="text-2xl font-black uppercase tracking-tight">
-				{inRound ? "Ronda en marcha" : "Entrando…"}
-			</p>
-			<p className="max-w-[26ch] text-sm opacity-70">
-				{inRound
-					? "Entrarás cuando termine y vuelvan a la sala."
-					: "Un momento, la sala está respondiendo."}
-			</p>
-		</div>
-	);
-}
-
-function Waiting({ view, meId, onDeal }: { view: SpyView; meId: string; onDeal: () => void }) {
-	const missing = MIN_PLAYERS - view.players.length;
+function Waiting({
+	players,
+	meId,
+	onDeal,
+}: {
+	players: readonly PlayerProfile[];
+	meId: string;
+	onDeal: () => void;
+}) {
+	const missing = MIN_PLAYERS - players.length;
+	const extra = players.length - MAX_PLAYERS;
 
 	return (
 		<div className="flex flex-1 flex-col justify-between gap-4">
@@ -177,17 +108,21 @@ function Waiting({ view, meId, onDeal }: { view: SpyView; meId: string; onDeal: 
 				<h1 className="text-center text-3xl font-black uppercase leading-none tracking-tight">
 					{manifest.name}
 				</h1>
-				<PlayerList players={view.players} meId={meId} />
+				<PlayerList players={players} meId={meId} />
 			</div>
 
 			<button
 				type="button"
 				onClick={onDeal}
-				disabled={missing > 0}
+				disabled={missing > 0 || extra > 0}
 				className="shrink-0 rounded-2xl py-4 text-lg font-black uppercase tracking-widest active:scale-[0.98] disabled:opacity-40"
 				style={{ backgroundColor: COLORS.gold, color: COLORS.night }}
 			>
-				{missing > 0 ? `Falta${missing > 1 ? "n" : ""} ${missing} para empezar` : "Repartir"}
+				{missing > 0
+					? `Falta${missing > 1 ? "n" : ""} ${missing} para empezar`
+					: extra > 0
+						? `Sobra${extra > 1 ? "n" : ""} ${extra}: máximo ${MAX_PLAYERS}`
+						: "Repartir"}
 			</button>
 		</div>
 	);
@@ -197,7 +132,7 @@ function Playing({ view, meId, onReveal }: { view: SpyView; meId: string; onReve
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-3">
 			<RoleCard card={view.card} />
-			<PlayerList players={view.players} meId={meId} />
+			<PlayerList players={view.participants} meId={meId} />
 			<LocationList locations={view.locations} />
 			<button
 				type="button"

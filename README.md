@@ -40,31 +40,39 @@ pnpm check-types  # TypeScript en todo el monorepo
 pnpm check        # Biome (formato y lint)
 ```
 
-## Quién juega
+## Cómo se juega
 
-No hay cuentas. La primera vez que alguien abre un juego se le pide un nombre y
-se le da una cara (un *blobatar*, generado a partir de una semilla que puede
-volver a tirar hasta que le guste). Eso se guarda en el móvil y desde ahí viaja
-con cada conexión y con cada jugada: es lo que los demás ven en las fichas y en
-las listas de jugadores, en todos los juegos. La ruta `_jugador` de la app es la
-puerta: ningún juego se abre sin perfil.
+Como en los juegos de sobremesa de consola: cada uno pone su nombre una vez,
+alguien crea una sala y dicta el código, los demás entran, y dentro de la sala
+se elige a qué jugar. Se puede cambiar de juego sin que nadie vuelva a teclear
+nada.
 
-El servidor recibe el perfil al abrir el WebSocket, lo adjunta al socket (así
-sobrevive a la hibernación del Durable Object) y lo pasa al motor con cada
-acción como `ctx.actor`. Un motor que quiera saber quién hizo la jugada, o
-pintar su cara, lo lee de ahí; no hay una acción de "unirse con nombre".
+- **Perfil.** No hay cuentas. La primera vez que alguien abre una sala se le
+  pide un nombre y se le da una cara (un *blobatar*, generado a partir de una
+  semilla que puede volver a tirar hasta que le guste). Se guarda en el móvil y
+  desde ahí viaja con cada conexión y cada jugada: es lo que los demás ven en las
+  fichas y en las listas. La ruta `_jugador` es la puerta: nada se abre sin él.
+- **Sala.** Un código de cuatro caracteres. Conectarse es entrar; salir es un
+  botón. El primero que entró es el anfitrión y es quien pone un juego sobre la
+  mesa o lo recoge — la forma más simple de que no haya cinco dedos cambiando de
+  juego a la vez.
+- **Juego.** Recibe la gente de la sala y no lleva lista propia. Código Secreto
+  pide elegir equipo y papel al entrar (y el motor hace cumplir quién destapa y
+  quién señala según el asiento); El Espía reparte directamente a quien esté.
 
 ## Cómo se sincroniza una partida
 
-Cada sala es un Durable Object, identificado por el juego y el código que los
-jugadores se dictan en voz alta. Todos los móviles de la sala abren un WebSocket
-contra él, y el objeto difunde el estado después de cada jugada.
+Cada sala es un Durable Object, identificado por el código que los jugadores se
+dictan en voz alta. Todos los móviles de la sala abren un WebSocket contra él,
+y el objeto difunde la sala —gente, juego elegido y estado del juego— después
+de cada cambio.
 
 Cinco decisiones que conviene conocer antes de tocar nada:
 
-- **El servidor no sabe a qué se juega.** Busca el motor por el slug de la URL y
-  le pasa las acciones (`apps/realtime/src/engines.ts`). Añadir un juego al
-  servidor es añadir una línea a ese registro.
+- **El servidor no sabe a qué se juega.** Lleva la sala (quién está, qué juego
+  hay puesto) y busca el motor por slug para pasarle las jugadas
+  (`apps/realtime/src/engines.ts`). Añadir un juego al servidor es añadir una
+  línea a ese registro.
 - **El servidor y el navegador ejecutan el mismo motor.** Vive en
   `packages/<juego>/src/engine` y no importa React, así que el Durable Object
   aplica exactamente las mismas reglas que la pantalla. No hay dos versiones del
@@ -80,10 +88,11 @@ Cinco decisiones que conviene conocer antes de tocar nada:
   el WebSocket en cuanto se bloquea la pantalla, y sin él una sala se perdería
   cada vez que el grupo deja de mirar el móvil a la vez. Una alarma borra la sala
   entera 24 horas después de la última jugada.
-- **Perder la conexión no rompe la partida.** Código Secreto sigue siendo jugable
-  sin servidor: el tablero se deriva del código y cada móvil lleva sus propias
-  marcas. El Espía no puede —hace falta alguien que reparta a escondidas— y lo
-  dice en pantalla en lugar de quedarse en blanco.
+- **Sin servidor no hay sala.** La sala es literalmente el sitio donde están los
+  demás, así que no hay modo local: la pantalla dice "sin conexión" y reintenta
+  sola. Lo que sí hay es respuesta inmediata en los juegos sin secretos: el
+  cliente aplica su jugada antes de que el servidor conteste, porque va a
+  confirmar lo mismo.
 
 ## Añadir un juego
 
@@ -91,12 +100,14 @@ Cinco decisiones que conviene conocer antes de tocar nada:
    a `./src/index.ts` y a `./src/engine/index.ts`) y su `tsconfig.json`
    extendiendo el de la raíz.
 2. Un `GameManifest` exportado: es todo lo que la app sabe del juego.
-3. Un `GameEngine` en `src/engine`, **sin importar React**. Si el juego reparte
+3. Un `GameEngine` en `src/engine`, **sin importar React**. Recibe la gente de
+   la sala en `ctx.players` y quién juega en `ctx.actor`. Si el juego reparte
    secretos, implementar también `project`.
-4. Los componentes de sus pantallas, con la estética que le corresponda.
-5. Registrarlo en tres sitios: `apps/realtime/src/engines.ts` (para que el
-   servidor lo aloje), `apps/web/src/games.ts` (para el catálogo) y una ruta en
-   `apps/web/src/routes/`.
+4. Una pantalla que cumpla `GameScreenProps` (vista, gente, `play`, `onExit`
+   para el anfitrión), con la estética que le corresponda. No sabe nada de
+   conexiones ni de rutas.
+5. Registrarlo en dos sitios: `apps/realtime/src/engines.ts` (para que el
+   servidor lo aloje) y `apps/web/src/games.ts` (manifest, motor y pantalla).
 6. Añadir su `src` a las líneas `@source` de `apps/web/src/styles.css`, o
    Tailwind no verá sus clases y el juego saldrá sin estilos.
 

@@ -1,5 +1,6 @@
+import type { PlayerProfile } from "@mgames/game-kit";
 import { Avatar } from "@mgames/game-kit/react";
-import type { CardKind, Vote } from "../engine/index.ts";
+import type { CardKind } from "../engine/index.ts";
 import { COLORS } from "../theme.ts";
 
 /** Fondo y color de texto de cada tipo de carta, ya emparejados para que contrasten. */
@@ -19,7 +20,7 @@ export interface CardProps {
 	kind: CardKind | null;
 	revealed: boolean;
 	/** Quiénes están señalando esta carta. */
-	votes?: readonly Vote[];
+	votes?: readonly PlayerProfile[];
 	/** Si la ficha de quien mira está aquí, para que sepa que puede retirarla. */
 	mine?: boolean;
 	onClick?: () => void;
@@ -72,7 +73,7 @@ export function Card({ word, kind, revealed, votes = [], mine, onClick, disabled
  * Es lo que ve el jefe para saber por dónde va su equipo sin que nadie diga
  * la palabra en voz alta, y lo que ve el resto de la mesa para discutir.
  */
-function VoteChips({ votes }: { votes: readonly Vote[] }) {
+function VoteChips({ votes }: { votes: readonly PlayerProfile[] }) {
 	const visible = votes.slice(0, MAX_VISIBLE_VOTES);
 	const rest = votes.length - visible.length;
 
@@ -80,7 +81,7 @@ function VoteChips({ votes }: { votes: readonly Vote[] }) {
 		<span className="pointer-events-none absolute -top-1 -right-1 flex items-center">
 			{visible.map((vote, i) => (
 				<span
-					key={`${vote.name}-${i}`}
+					key={vote.id}
 					className="rounded-full bg-white ring-2 ring-white"
 					// Solapadas como fichas de póquer: cada una tapa un poco la anterior.
 					style={{ marginLeft: i === 0 ? 0 : "-0.45rem", zIndex: visible.length - i }}

@@ -4,82 +4,46 @@ import type { PlayerProfile } from "@mgames/game-kit";
 import { LOCATIONS } from "./locations.ts";
 import { MAX_PLAYERS, MIN_PLAYERS, spyCountFor } from "./rules.ts";
 import { applyAction, createGame, deal, project } from "./state.ts";
-import type { SpyPlayer, SpyState } from "./types.ts";
+import type { SpyState } from "./types.ts";
 
-const players = (n: number): SpyPlayer[] =>
+const players = (n: number): PlayerProfile[] =>
 	Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `Jugador ${i}`, avatar: `cara${i}` }));
 
-/** El perfil con el que un jugador de la lista envía sus acciones. */
-const como = (id: string): PlayerProfile => ({
-	id,
-	name: `Jugador ${id.slice(1)}`,
-	avatar: `cara${id.slice(1)}`,
-});
-
-/** Sala con `n` jugadores dentro. */
-function salaCon(n: number): SpyState {
-	return players(n).reduce<SpyState>(
-		(state, player) => applyAction(state, { type: "unirse" }, player),
-		createGame("SALA"),
-	);
-}
-
+/** Una ronda repartida a `n` jugadores. */
 const jugando = (n: number, seed = "RONDA") =>
-	applyAction(salaCon(n), { type: "repartir", seed }, como("p0"));
+	applyAction(createGame("SALA"), { type: "repartir", seed }, players(n));
 
-describe("entrar y salir de la sala", () => {
-	it("cada móvil entra una vez", () => {
-		const sala = salaCon(4);
-		assert.equal(sala.players.length, 4);
-		assert.deepEqual(
-			sala.players.map((p) => p.id),
-			["p0", "p1", "p2", "p3"],
-		);
-	});
-
-	it("volver a entrar con el mismo móvil actualiza nombre y cara, no añade un jugador", () => {
-		const otro = { id: "p1", name: "Otro", avatar: "x" };
-		const sala = applyAction(salaCon(3), { type: "unirse" }, otro);
-		assert.equal(sala.players.length, 3);
-		assert.deepEqual(
-			sala.players.find((p) => p.id === "p1"),
-			otro,
-		);
-	});
-
-	it("volver a entrar sin cambios no toca el estado", () => {
-		const sala = salaCon(3);
-		assert.equal(applyAction(sala, { type: "unirse" }, como("p1")), sala);
-	});
-
-	it("no deja entrar por encima del máximo", () => {
-		const llena = salaCon(MAX_PLAYERS);
-		const sobra = applyAction(llena, { type: "unirse" }, como("p99"));
-		assert.equal(sobra, llena);
-	});
-
-	it("nadie entra con la ronda empezada", () => {
-		const ronda = jugando(4);
-		assert.equal(applyAction(ronda, { type: "unirse" }, como("p9")), ronda);
-	});
-
-	it("si alguien se va en mitad de la ronda, se vuelve a la sala", () => {
-		const despues = applyAction(jugando(4), { type: "salir" }, como("p2"));
-		assert.equal(despues.phase, "sala");
-		assert.equal(despues.round, null);
-		assert.equal(despues.players.length, 3);
-	});
-});
+const revelada = (n: number) => applyAction(jugando(n), { type: "revelar" }, players(n));
 
 describe("repartir", () => {
-	it("no reparte con menos jugadores del mínimo", () => {
-		const pocos = salaCon(MIN_PLAYERS - 1);
-		assert.equal(applyAction(pocos, { type: "repartir", seed: "S" }, como("p0")), pocos);
+	it("no reparte con menos jugadores del mínimo ni con más del máximo", () => {
+		const sala = createGame("SALA");
+		assert.equal(
+			applyAction(sala, { type: "repartir", seed: "S" }, players(MIN_PLAYERS - 1)),
+			sala,
+		);
+		assert.equal(
+			applyAction(sala, { type: "repartir", seed: "S" }, players(MAX_PLAYERS + 1)),
+			sala,
+		);
+	});
+
+	it("no reparte con una ronda en marcha: primero hay que destapar", () => {
+		const ronda = jugando(4);
+		assert.equal(applyAction(ronda, { type: "repartir", seed: "OTRA" }, players(4)), ronda);
+	});
+
+	it("reparte a quien está en la sala en ese momento, y lo recuerda", () => {
+		const round = jugando(5).round;
+		assert.ok(round);
+		assert.deepEqual(
+			round.participants.map((p) => p.id),
+			players(5).map((p) => p.id),
+		);
 	});
 
 	it("reparte una localización del catálogo y un papel suyo a cada agente", () => {
-		const state = jugando(6);
-		const round = state.round;
+		const round = jugando(6).round;
 		assert.ok(round);
 		const location = LOCATIONS.find((l) => l.name === round.location);
 		assert.ok(location, "la localización tiene que estar en el catálogo");
@@ -130,15 +94,15 @@ describe("lo que ve cada jugador", () => {
 	 * y se cuele en la vista sin que nadie se dé cuenta. Con esta lista, ese
 	 * descuido rompe el test.
 	 */
-	const CLAVES_DE_LA_VISTA = ["card", "locations", "phase", "players", "reveal", "updatedAt"];
+	const CLAVES_DE_LA_VISTA = ["card", "locations", "participants", "phase", "reveal", "updatedAt"];
 
 	it("la vista no lleva más campos que los previstos, ni durante la ronda", () => {
 		const state = jugando(5);
-		for (const player of state.players) {
+		for (const player of players(5)) {
 			const vista = project(state, player.id);
 			assert.deepEqual(Object.keys(vista).sort(), CLAVES_DE_LA_VISTA);
-			// De los demás sólo se sabe cómo se llaman.
-			for (const otro of vista.players) {
+			// De los demás sólo se sabe cómo se llaman y qué cara tienen.
+			for (const otro of vista.participants) {
 				assert.deepEqual(Object.keys(otro).sort(), ["avatar", "id", "name"]);
 			}
 		}
@@ -168,48 +132,43 @@ describe("lo que ve cada jugador", () => {
 	it("nadie puede deducir quién es el espía antes de destapar", () => {
 		const state = jugando(6);
 		const spyIds = state.round?.spyIds ?? [];
-		for (const player of state.players) {
+		for (const player of players(6)) {
 			const vista = project(state, player.id);
 			// Sólo tu propia carta te dice que eres espía; la de nadie más lo dice.
-			const seSabe = vista.card?.kind === "espia";
-			assert.equal(seSabe, spyIds.includes(player.id));
+			assert.equal(vista.card?.kind === "espia", spyIds.includes(player.id));
 		}
 	});
 
-	it("en la sala nadie tiene carta", () => {
-		assert.equal(project(salaCon(4), "p0").card, null);
+	it("sobre la mesa sin repartir nadie tiene carta", () => {
+		assert.equal(project(createGame("SALA"), "p0").card, null);
 	});
 
 	it("al destapar, todos ven la localización y el nombre del espía", () => {
-		const state = applyAction(jugando(5), { type: "revelar" }, como("p0"));
+		const state = revelada(5);
 		const spyId = state.round?.spyIds[0] as string;
-		const spyName = state.players.find((p) => p.id === spyId)?.name;
-		for (const player of state.players) {
+		const spyName = players(5).find((p) => p.id === spyId)?.name;
+		for (const player of players(5)) {
 			const vista = project(state, player.id);
 			assert.equal(vista.reveal?.location, state.round?.location);
 			assert.deepEqual(vista.reveal?.spyNames, [spyName]);
 		}
 	});
 
-	it("quien mira sin jugar no recibe carta", () => {
+	it("quien entra a mitad de ronda no recibe carta", () => {
 		assert.equal(project(jugando(4), "mirón").card, null);
 	});
 });
 
 describe("final de ronda", () => {
 	it("sólo se destapa una ronda en curso", () => {
-		const sala = salaCon(4);
-		assert.equal(applyAction(sala, { type: "revelar" }, como("p0")), sala);
+		const sala = createGame("SALA");
+		assert.equal(applyAction(sala, { type: "revelar" }, players(4)), sala);
 	});
 
-	it("volver a la sala conserva a los jugadores y borra el reparto", () => {
-		const state = applyAction(
-			applyAction(jugando(5), { type: "revelar" }, como("p0")),
-			{ type: "volver" },
-			como("p0"),
-		);
+	it("volver borra el reparto y deja repartir otra vez", () => {
+		const state: SpyState = applyAction(revelada(5), { type: "volver" }, players(5));
 		assert.equal(state.phase, "sala");
 		assert.equal(state.round, null);
-		assert.equal(state.players.length, 5);
+		assert.equal(applyAction(state, { type: "repartir", seed: "X" }, players(5)).phase, "jugando");
 	});
 });

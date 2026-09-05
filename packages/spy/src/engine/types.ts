@@ -1,25 +1,31 @@
-/** En qué momento está la sala. */
+/** En qué momento está la partida. */
 export type Phase =
-	/** Esperando a que entre la gente. Se ven los nombres, nada más. */
+	/** Sobre la mesa, sin repartir. Se ve quién hay en la sala, nada más. */
 	| "sala"
 	/** Ronda en curso: cada uno tiene su carta y se hacen preguntas. */
 	| "jugando"
 	/** Se ha destapado: todos ven la localización y quién era el espía. */
 	| "revelado";
 
+/** Un jugador de la ronda, con lo que hace falta para nombrarlo y pintarlo. */
 export interface SpyPlayer {
 	/** El identificador del móvil. */
 	id: string;
 	name: string;
-	/** Semilla de su cara, para pintarla en la lista. */
+	/** Semilla de su cara. */
 	avatar: string;
 }
 
 /**
  * El reparto de una ronda. Es el secreto de la partida: nunca sale del servidor
  * entero, sólo proyectado con `project`.
+ *
+ * Guarda a los participantes en vez de mirar la sala: quien entra en la sala a
+ * mitad de ronda no está en el reparto, y quien se va sigue contando hasta que
+ * se destape.
  */
 export interface Round {
+	participants: readonly SpyPlayer[];
 	location: string;
 	/** Quiénes son espías. Uno normalmente; dos cuando la mesa es grande. */
 	spyIds: readonly string[];
@@ -29,7 +35,6 @@ export interface Round {
 
 export interface SpyState {
 	phase: Phase;
-	players: readonly SpyPlayer[];
 	round: Round | null;
 	updatedAt: number;
 }
@@ -46,8 +51,9 @@ export type Card = { kind: "espia" } | { kind: "agente"; location: string; role:
  */
 export interface SpyView {
 	phase: Phase;
-	players: readonly SpyPlayer[];
-	/** La carta de quien mira. `null` mientras no haya ronda. */
+	/** Quiénes juegan esta ronda. Vacío mientras no haya ronda. */
+	participants: readonly SpyPlayer[];
+	/** La carta de quien mira. `null` mientras no haya ronda o si no está en ella. */
 	card: Card | null;
 	/** La verdad, sólo cuando la ronda ya se ha destapado. */
 	reveal: { location: string; spyNames: readonly string[] } | null;
@@ -57,13 +63,9 @@ export interface SpyView {
 }
 
 export type SpyAction =
-	/** Entrar en la sala. El nombre y la cara vienen con quien envía la acción. */
-	| { type: "unirse" }
-	/** Salir de la sala (alguien se va a casa). */
-	| { type: "salir" }
-	/** Repartir una ronda nueva. La semilla la pone quien reparte. */
+	/** Repartir una ronda nueva a quien esté en la sala. La semilla la pone quien reparte. */
 	| { type: "repartir"; seed: string }
 	/** Destapar: se acabó, que se vea quién era. */
 	| { type: "revelar" }
-	/** Volver a la sala sin perder a los jugadores. */
+	/** Volver a la mesa sin ronda, para repartir otra. */
 	| { type: "volver" };

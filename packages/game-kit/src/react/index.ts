@@ -14,10 +14,5 @@ export {
 	saveProfile,
 	useProfile,
 } from "./profile.ts";
-export {
-	type GameRoom,
-	type RoomStatus,
-	type UseGameRoomOptions,
-	useGameRoom,
-} from "./useGameRoom.ts";
+export { type Room, type RoomStatus, type UseRoomOptions, useRoom } from "./useRoom.ts";
 export { useWakeLock } from "./useWakeLock.ts";

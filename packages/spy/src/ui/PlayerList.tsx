@@ -1,9 +1,9 @@
 import { Avatar } from "@mgames/game-kit/react";
-import type { SpyPlayer } from "../engine/index.ts";
 import { COLORS } from "../theme.ts";
 
 export interface PlayerListProps {
-	players: readonly SpyPlayer[];
+	/** Cualquiera con id, nombre y cara: la sala o los participantes de la ronda. */
+	players: readonly { id: string; name: string; avatar: string }[];
 	/** Quién mira, para señalarse en la lista. */
 	meId: string;
 }

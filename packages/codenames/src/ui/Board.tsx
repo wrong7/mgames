@@ -1,4 +1,5 @@
-import type { Board as BoardData, CardKind, Vote } from "../engine/index.ts";
+import type { PlayerProfile } from "@mgames/game-kit";
+import type { Board as BoardData, CardKind } from "../engine/index.ts";
 import { Card } from "./Card.tsx";
 
 export interface BoardProps {
@@ -9,8 +10,10 @@ export interface BoardProps {
 	 * si es `false`, sólo el de las que ya se han destapado.
 	 */
 	showAllKinds: boolean;
-	/** Las fichas de todos, por jugador. */
-	votes?: Readonly<Record<string, Vote>>;
+	/** Carta señalada por cada jugador. */
+	votes?: Readonly<Record<string, number>>;
+	/** La gente de la sala, para poner cara a cada ficha. */
+	players?: readonly PlayerProfile[];
 	/** Quién mira, para resaltar su propia ficha. */
 	meId?: string;
 	onCardPress?: (index: number) => void;
@@ -23,16 +26,20 @@ export function Board({
 	revealed,
 	showAllKinds,
 	votes = {},
+	players = [],
 	meId,
 	onCardPress,
 	disabled,
 }: BoardProps) {
-	// De "un voto por jugador" a "quiénes señalan cada carta", que es como se pinta.
-	const votesByCard = new Map<number, Vote[]>();
-	for (const vote of Object.values(votes)) {
-		votesByCard.set(vote.index, [...(votesByCard.get(vote.index) ?? []), vote]);
+	// De "una carta por jugador" a "quiénes señalan cada carta", que es como se
+	// pinta. La cara sale de la sala: si alguien se cambia de nombre, la ficha
+	// se actualiza sola.
+	const votesByCard = new Map<number, PlayerProfile[]>();
+	for (const [playerId, index] of Object.entries(votes)) {
+		const player = players.find((p) => p.id === playerId);
+		if (player) votesByCard.set(index, [...(votesByCard.get(index) ?? []), player]);
 	}
-	const myIndex = meId ? votes[meId]?.index : undefined;
+	const myIndex = meId ? votes[meId] : undefined;
 
 	return (
 		<div

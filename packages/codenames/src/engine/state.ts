@@ -1,14 +1,15 @@
 import type { PlayerProfile } from "@mgames/game-kit";
 import { buildBoard, CARD_COUNT, remainingFor } from "./board.ts";
-import type { Board, GameAction, GameState, Team, Vote } from "./types.ts";
+import type { Board, GameAction, GameState, Seat, Team } from "./types.ts";
 
 const other = (team: Team): Team => (team === "azul" ? "rojo" : "azul");
 
-/** Estado inicial de una sala recién creada (o recién reiniciada). */
+/** Estado inicial de una partida recién puesta sobre la mesa: nadie sentado aún. */
 export function createGame(seed: string, now: number = Date.now()): GameState {
 	const board = buildBoard(seed);
 	return {
 		board,
+		seats: {},
 		revealed: Array<boolean>(CARD_COUNT).fill(false),
 		votes: {},
 		turn: board.startingTeam,
@@ -20,12 +21,13 @@ export function createGame(seed: string, now: number = Date.now()): GameState {
 
 /**
  * Aplica una acción al estado. Función pura: mismo estado + misma acción =
- * mismo resultado, en el navegador y en el Durable Object.
+ * mismo resultado, en el navegador y en el servidor.
  *
- * Devuelve el estado sin tocar cuando la acción no es válida (índice fuera de
- * rango, partida ya terminada, carta ya destapada). Preferimos ignorar la jugada
- * imposible antes que lanzar: los mensajes llegan por red y de varios móviles a
- * la vez, así que las carreras son normales, no errores.
+ * Devuelve el estado sin tocar cuando la acción no procede: índice fuera de
+ * rango, partida terminada, carta ya destapada, o alguien haciendo algo que no
+ * le toca por su asiento. Preferimos ignorar la jugada imposible antes que
+ * lanzar: los mensajes llegan por red y de varios móviles a la vez, así que las
+ * carreras son normales, no errores.
  */
 export function applyAction(
 	state: GameState,
@@ -33,39 +35,77 @@ export function applyAction(
 	actor: PlayerProfile,
 	now: number = Date.now(),
 ): GameState {
+	const seat = state.seats[actor.id];
+
 	switch (action.type) {
-		case "restart":
-			return createGame(action.seed, now);
+		case "sit": {
+			const next: Seat = { team: action.team, role: action.role };
+			if (seat?.team === next.team && seat.role === next.role) return state;
+			// Cambiar de sitio retira tu ficha: era de otro equipo o de otro papel.
+			return {
+				...state,
+				seats: { ...state.seats, [actor.id]: next },
+				votes: without(state.votes, actor.id),
+				updatedAt: now,
+			};
+		}
+
+		case "stand": {
+			if (!seat) return state;
+			return {
+				...state,
+				seats: without(state.seats, actor.id),
+				votes: without(state.votes, actor.id),
+				updatedAt: now,
+			};
+		}
+
+		case "restart": {
+			// Los asientos se conservan: la gente sigue donde estaba, cambia el tablero.
+			if (seat?.role !== "jefe") return state;
+			return { ...createGame(action.seed, now), seats: state.seats };
+		}
 
 		case "endTurn": {
-			if (state.winner) return state;
+			if (state.winner || !isTurnChief(seat, state.turn)) return state;
 			// Cambia el equipo que adivina: lo que señalaba el anterior ya no cuenta.
 			return { ...state, turn: other(state.turn), votes: {}, updatedAt: now };
 		}
 
 		case "vote": {
-			if (state.winner || !isValidIndex(action.index) || state.revealed[action.index]) {
+			if (
+				state.winner ||
+				!isValidIndex(action.index) ||
+				state.revealed[action.index] ||
+				seat?.role !== "agente" ||
+				seat.team !== state.turn
+			) {
 				return state;
 			}
-			const votes = { ...state.votes };
 			// Votar la carta que ya señalabas es retirar la ficha.
-			if (votes[actor.id]?.index === action.index) {
-				delete votes[actor.id];
-			} else {
-				votes[actor.id] = { index: action.index, name: actor.name, avatar: actor.avatar };
-			}
+			const votes =
+				state.votes[actor.id] === action.index
+					? without(state.votes, actor.id)
+					: { ...state.votes, [actor.id]: action.index };
 			return { ...state, votes, updatedAt: now };
 		}
 
 		case "unreveal": {
-			if (!isValidIndex(action.index) || !state.revealed[action.index]) return state;
+			if (seat?.role !== "jefe" || !isValidIndex(action.index) || !state.revealed[action.index]) {
+				return state;
+			}
 			const revealed = withRevealed(state.revealed, action.index, false);
 			// Destapar puede haber terminado la partida; al deshacerlo, vuelve a estar viva.
 			return { ...state, revealed, ...outcomeOf(state.board, revealed), updatedAt: now };
 		}
 
 		case "reveal": {
-			if (state.winner || !isValidIndex(action.index) || state.revealed[action.index]) {
+			if (
+				state.winner ||
+				!isValidIndex(action.index) ||
+				state.revealed[action.index] ||
+				!isTurnChief(seat, state.turn)
+			) {
 				return state;
 			}
 			const revealed = withRevealed(state.revealed, action.index, true);
@@ -89,12 +129,22 @@ export function applyAction(
 	}
 }
 
+/** Sólo el jefe del equipo que está adivinando toca las cartas. */
+function isTurnChief(seat: Seat | undefined, turn: Team): boolean {
+	return seat?.role === "jefe" && seat.team === turn;
+}
+
 function isValidIndex(index: number): boolean {
 	return Number.isInteger(index) && index >= 0 && index < CARD_COUNT;
 }
 
-function withoutVotesOn(votes: Readonly<Record<string, Vote>>, index: number) {
-	return Object.fromEntries(Object.entries(votes).filter(([, vote]) => vote.index !== index));
+function without<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
+	const { [key]: _, ...rest } = record;
+	return rest;
+}
+
+function withoutVotesOn(votes: Readonly<Record<string, number>>, index: number) {
+	return Object.fromEntries(Object.entries(votes).filter(([, i]) => i !== index));
 }
 
 function withRevealed(revealed: readonly boolean[], index: number, value: boolean): boolean[] {

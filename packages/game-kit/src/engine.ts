@@ -50,11 +50,24 @@ export interface GameEngine<State, Action, View = State> {
 	project?(state: State, actorId: string): View;
 }
 
+/**
+ * Un motor con los tipos borrados: como lo manejan el servidor y la sala, que
+ * no saben a qué se juega. El ensanchamiento es seguro porque nadie inventa un
+ * estado: sólo se devuelve al motor lo que ese mismo motor produjo.
+ */
+export type AnyEngine = GameEngine<unknown, unknown, unknown>;
+
 export interface EngineContext {
 	/** Semilla para todo lo aleatorio de la partida. La pone el servidor. */
 	seed: string;
 	/** Epoch en milisegundos. Se pasa en vez de leerlo para que `apply` sea pura. */
 	now: number;
+	/**
+	 * Quién está en la sala. Es la lista de la sala, no del juego: el motor no
+	 * tiene que mantener la suya ni pedir a nadie que "se una". Un juego que
+	 * reparta cartas reparte a esta gente.
+	 */
+	players: readonly PlayerProfile[];
 }
 
 export interface ActorContext extends EngineContext {

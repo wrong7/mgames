@@ -1,62 +1,58 @@
-import { type PlayerProfile, randomCode } from "@mgames/game-kit";
-import { useGameRoom, useWakeLock } from "@mgames/game-kit/react";
+import type { PlayerProfile } from "@mgames/game-kit";
+import { randomCode } from "@mgames/game-kit";
+import { useWakeLock } from "@mgames/game-kit/react";
 import { useState } from "react";
-import { engine, type Team } from "../engine/index.ts";
-import { manifest } from "../manifest.ts";
+import type { GameAction, GameState, Seat, Team } from "../engine/index.ts";
 import { COLORS } from "../theme.ts";
 import { Board } from "./Board.tsx";
 import { Scoreboard } from "./Scoreboard.tsx";
 
-/** Desde qué lado de la mesa se mira el tablero. */
-export type Role = "master" | "agente";
-
 export interface GameScreenProps {
-	/** Código de la sala: lo que los jugadores se dictan en voz alta. */
 	code: string;
-	role: Role;
-	/**
-	 * Origen del servidor de salas. Sin él la pantalla sigue siendo jugable, pero
-	 * cada móvil lleva sus propias marcas.
-	 */
-	realtimeUrl?: string;
-	/** Quién mira: sus fichas llevan su cara. */
+	state: GameState;
+	/** Dónde está sentado quien mira. */
+	seat: Seat;
 	profile: PlayerProfile;
-	/** Volver al menú del juego. La app decide qué significa eso. */
+	players: readonly PlayerProfile[];
+	live: boolean;
+	play: (action: GameAction) => void;
+	/** Levantarse para cambiar de equipo o de papel. */
+	onStand: () => void;
+	/** Recoger el juego. Sólo lo tiene el anfitrión. */
 	onExit?: () => void;
 }
 
 /**
- * La pantalla de juego, en las dos versiones que existen.
+ * El tablero, en las dos versiones que existen.
  *
  * El jefe de espías ve los colores de las 25 cartas; los agentes ven palabras en
  * blanco que se colorean al destaparse. Es la misma partida y el mismo estado:
- * lo único que cambia es cuánto se enseña.
+ * lo único que cambia es cuánto se enseña y qué hace tocar una carta.
  */
-export function GameScreen({ code, role, realtimeUrl, profile, onExit }: GameScreenProps) {
-	const {
-		view: state,
-		status,
-		synced,
-		dispatch,
-	} = useGameRoom({
-		engine,
-		game: manifest.slug,
-		code,
-		realtimeUrl,
-		profile,
-	});
-	const isMaster = role === "master";
+export function GameScreen({
+	code,
+	state,
+	seat,
+	profile,
+	players,
+	live,
+	play,
+	onStand,
+	onExit,
+}: GameScreenProps) {
+	const isChief = seat.role === "jefe";
+	const myTurn = seat.team === state.turn;
 
 	// Una partida son veinte minutos mirando el tablero a ratos y hablando el resto.
 	useWakeLock();
 
-	// El jefe destapa (y vuelve a tapar si se equivoca de dedo); los agentes sólo
-	// señalan. Es la regla del juego de mesa: el jefe es quien toca las cartas.
+	// El jefe destapa (y vuelve a tapar si se equivoca de dedo); los agentes
+	// señalan. El motor hace cumplir el turno, así que aquí sólo se decide el gesto.
 	const pressCard = (index: number) => {
-		if (isMaster) {
-			dispatch(state.revealed[index] ? { type: "unreveal", index } : { type: "reveal", index });
+		if (isChief) {
+			play(state.revealed[index] ? { type: "unreveal", index } : { type: "reveal", index });
 		} else {
-			dispatch({ type: "vote", index });
+			play({ type: "vote", index });
 		}
 	};
 
@@ -64,7 +60,7 @@ export function GameScreen({ code, role, realtimeUrl, profile, onExit }: GameScr
 		<div
 			className="relative flex h-dvh w-full flex-col gap-1.5 p-1.5"
 			style={{
-				backgroundColor: isMaster ? COLORS.masterBg : COLORS.teamBg,
+				backgroundColor: isChief ? COLORS.masterBg : COLORS.teamBg,
 				// El tablero llega hasta el borde de la pantalla, así que los controles
 				// tienen que esquivar la muesca y la barra de gestos.
 				paddingTop: "max(0.375rem, env(safe-area-inset-top))",
@@ -76,95 +72,94 @@ export function GameScreen({ code, role, realtimeUrl, profile, onExit }: GameScr
 				revealed={state.revealed}
 				turn={state.turn}
 				code={code}
-				status={status}
+				live={live}
 			/>
 
 			<Board
 				board={state.board}
 				revealed={state.revealed}
-				showAllKinds={isMaster}
+				showAllKinds={isChief}
 				votes={state.votes}
+				players={players}
 				meId={profile.id}
 				onCardPress={pressCard}
 			/>
 
 			<Controls
-				turn={state.turn}
-				isMaster={isMaster}
-				onEndTurn={() => dispatch({ type: "endTurn" })}
-				onRestart={() => dispatch({ type: "restart", seed: randomCode(12) })}
+				seat={seat}
+				myTurn={myTurn}
+				onEndTurn={() => play({ type: "endTurn" })}
+				onRestart={() => play({ type: "restart", seed: randomCode(12) })}
+				onStand={onStand}
 				onExit={onExit}
 			/>
-
-			{!synced && <ConnectingOverlay code={code} />}
 
 			{state.winner && (
 				<WinnerOverlay
 					winner={state.winner}
 					endedBy={state.endedBy}
-					onRestart={() => dispatch({ type: "restart", seed: randomCode(12) })}
+					isChief={isChief}
+					onRestart={() => play({ type: "restart", seed: randomCode(12) })}
 				/>
 			)}
 		</div>
 	);
 }
 
-/**
- * Velo mientras llega el primer estado de la sala.
- *
- * Tapa el tablero en lugar de sustituirlo para que la pantalla no dé un salto de
- * maquetación cuando el servidor conteste.
- */
-function ConnectingOverlay({ code }: { code: string }) {
-	return (
-		<div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/75 backdrop-blur-md">
-			<p className="text-xs uppercase tracking-[0.3em] text-white/60">Entrando en la sala</p>
-			<p className="font-mono text-4xl font-black tracking-[0.2em] text-white">{code}</p>
-		</div>
-	);
-}
-
 function Controls({
-	turn,
-	isMaster,
+	seat,
+	myTurn,
 	onEndTurn,
 	onRestart,
+	onStand,
 	onExit,
 }: {
-	turn: Team;
-	isMaster: boolean;
+	seat: Seat;
+	myTurn: boolean;
 	onEndTurn: () => void;
 	onRestart: () => void;
+	onStand: () => void;
 	onExit?: () => void;
 }) {
 	// Repartir de nuevo tira la partida de todo el grupo, no sólo la de quien
 	// pulsa, así que pedimos una segunda pulsación en lugar de un `confirm()`,
 	// que en móvil es un ladrillo modal del sistema.
 	const [confirmingRestart, setConfirmingRestart] = useState(false);
+	const isChief = seat.role === "jefe";
 
 	return (
 		<div className="flex shrink-0 items-stretch gap-1.5">
-			{onExit && (
-				<button
-					type="button"
-					onClick={onExit}
-					className="rounded-xl bg-black/80 px-3 text-white active:scale-95"
-					aria-label="Volver al menú"
-				>
-					←
-				</button>
-			)}
-
 			<button
 				type="button"
-				onClick={onEndTurn}
-				className="flex-1 rounded-xl py-2.5 text-sm font-bold uppercase tracking-widest text-white active:scale-[0.98]"
-				style={{ backgroundColor: COLORS[turn] }}
+				onClick={onExit ?? onStand}
+				className="rounded-xl bg-black/80 px-3 text-white active:scale-95"
+				aria-label={onExit ? "Recoger el juego" : "Cambiar de equipo"}
 			>
-				Pasar turno
+				←
 			</button>
 
-			{isMaster && (
+			<SeatBadge seat={seat} onClick={onStand} />
+
+			{isChief ? (
+				<button
+					type="button"
+					onClick={onEndTurn}
+					disabled={!myTurn}
+					className="flex-1 rounded-xl py-2.5 text-sm font-bold uppercase tracking-widest text-white active:scale-[0.98] disabled:opacity-40"
+					style={{ backgroundColor: COLORS[seat.team] }}
+				>
+					{myTurn ? "Pasar turno" : "Turno del otro equipo"}
+				</button>
+			) : (
+				<div
+					className="flex flex-1 items-center justify-center rounded-xl py-2.5 text-xs font-bold uppercase tracking-widest text-white"
+					style={{ backgroundColor: COLORS[seat.team], opacity: myTurn ? 1 : 0.5 }}
+				>
+					{myTurn ? "Señala tu carta" : "Turno del otro equipo"}
+				</div>
+			)}
+
+			{isChief && (
 				<button
 					type="button"
 					onClick={() => {
@@ -177,24 +172,41 @@ function Controls({
 						}
 					}}
 					className={[
-						"rounded-xl px-4 text-sm font-bold uppercase tracking-widest active:scale-95",
+						"rounded-xl px-3 text-sm font-bold uppercase tracking-widest active:scale-95",
 						confirmingRestart ? "bg-white text-black" : "bg-black/80 text-white",
 					].join(" ")}
 				>
-					{confirmingRestart ? "¿Seguro?" : "Repartir"}
+					{confirmingRestart ? "¿Seguro?" : "↻"}
 				</button>
 			)}
 		</div>
 	);
 }
 
+/** Tu asiento, tocable para levantarte. */
+function SeatBadge({ seat, onClick }: { seat: Seat; onClick: () => void }) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			className="rounded-xl border-2 px-2 text-[0.6rem] font-bold uppercase leading-tight tracking-wider text-white active:scale-95"
+			style={{ backgroundColor: COLORS[seat.team], borderColor: "#0008" }}
+			aria-label="Cambiar de equipo o de papel"
+		>
+			{seat.role}
+		</button>
+	);
+}
+
 function WinnerOverlay({
 	winner,
 	endedBy,
+	isChief,
 	onRestart,
 }: {
 	winner: Team;
 	endedBy: "cartas" | "asesino" | null;
+	isChief: boolean;
 	onRestart: () => void;
 }) {
 	return (
@@ -208,13 +220,19 @@ function WinnerOverlay({
 			>
 				Gana {winner}
 			</p>
-			<button
-				type="button"
-				onClick={onRestart}
-				className="rounded-xl bg-white px-6 py-3 text-sm font-bold uppercase tracking-widest text-black active:scale-95"
-			>
-				Otra partida
-			</button>
+			{isChief ? (
+				<button
+					type="button"
+					onClick={onRestart}
+					className="rounded-xl bg-white px-6 py-3 text-sm font-bold uppercase tracking-widest text-black active:scale-95"
+				>
+					Otra partida
+				</button>
+			) : (
+				<p className="text-xs uppercase tracking-widest text-white/60">
+					El jefe reparte la siguiente
+				</p>
+			)}
 		</div>
 	);
 }
