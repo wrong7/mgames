@@ -1,4 +1,5 @@
 import { isCompleteCode, normalizeCode } from "@mgames/game-kit";
+import { findEngine } from "./engines.ts";
 import { GameRoom } from "./room.ts";
 
 export interface Env {
@@ -10,7 +11,7 @@ export interface Env {
 /**
  * Servidor de salas.
  *
- * Todo lo que hace es enrutar: cada código de sala se traduce a su Durable
+ * Todo lo que hace es enrutar: cada juego y código se traducen a su Durable
  * Object, que es quien guarda la partida y habla con los móviles. No hay estado
  * en este fichero a propósito — un Worker se ejecuta en muchos sitios a la vez y
  * cualquier cosa que guardase aquí sería distinta para cada jugador.
@@ -23,7 +24,7 @@ export default {
 			return Response.json({ ok: true });
 		}
 
-		const match = url.pathname.match(/^\/room\/([^/]+)$/);
+		const match = url.pathname.match(/^\/room\/([^/]+)\/([^/]+)$/);
 		if (!match) {
 			return new Response("No encontrado", { status: 404 });
 		}
@@ -32,15 +33,22 @@ export default {
 			return new Response("Origen no autorizado", { status: 403 });
 		}
 
-		const code = normalizeCode(decodeURIComponent(match[1] as string));
+		const game = decodeURIComponent(match[1] as string);
+		if (!findEngine(game)) {
+			return new Response("Juego desconocido", { status: 404 });
+		}
+
+		const code = normalizeCode(decodeURIComponent(match[2] as string));
 		if (!isCompleteCode(code)) {
 			return new Response("Código de sala inválido", { status: 400 });
 		}
 
-		// El nombre del objeto es el código de la sala: quien teclee el mismo código
-		// acaba en el mismo Durable Object, esté donde esté.
-		const id = env.GAME_ROOM.idFromName(code);
-		return env.GAME_ROOM.get(id).fetch(request);
+		// El nombre del objeto lleva el juego además del código: dos juegos pueden
+		// tener a la vez una sala "K7QM" sin pisarse.
+		const id = env.GAME_ROOM.idFromName(`${game}:${code}`);
+		// El objeto no ve la ruta, así que el juego se le pasa como parámetro.
+		url.searchParams.set("juego", game);
+		return env.GAME_ROOM.get(id).fetch(new Request(url, request));
 	},
 } satisfies ExportedHandler<Env>;
 

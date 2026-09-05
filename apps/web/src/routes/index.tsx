@@ -14,10 +14,10 @@ function Catalogo() {
 	return (
 		<main className="h-dvh overflow-y-auto bg-neutral-950 px-5 pb-10 text-white">
 			<header className="pt-12 pb-8">
-				<h1 className="text-4xl font-black uppercase leading-none tracking-tight">mgames</h1>
+				<h1 className="text-4xl font-black uppercase leading-none tracking-tight">No mires</h1>
 				<p className="mt-2 max-w-xs text-sm text-white/60">
-					Juegos para jugar en persona, cada uno en su móvil. Se entra con un código; no hay nada
-					que instalar.
+					Juegos para jugar en persona, cada uno en su móvil: tu pantalla dice algo que la de al
+					lado no. Se entra con un código y no hay nada que instalar.
 				</p>
 			</header>
 

@@ -1,6 +1,6 @@
+import type { RoomStatus } from "@mgames/game-kit/react";
 import { type Board, remainingFor, type Team } from "../engine/index.ts";
 import { COLORS } from "../theme.ts";
-import type { RoomStatus } from "./useGameRoom.ts";
 
 export interface ScoreboardProps {
 	board: Board;

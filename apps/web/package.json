@@ -16,6 +16,7 @@
 	"dependencies": {
 		"@mgames/codenames": "workspace:*",
 		"@mgames/game-kit": "workspace:*",
+		"@mgames/spy": "workspace:*",
 		"@tailwindcss/vite": "^4.1.18",
 		"@tanstack/react-devtools": "latest",
 		"@tanstack/react-router": "latest",

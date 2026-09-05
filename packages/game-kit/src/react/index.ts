@@ -5,4 +5,11 @@
  * código puro: el servidor de salas lo importa desde un Worker, donde no existen
  * `document` ni `navigator`.
  */
+export { readPlayerId } from "./player.ts";
+export {
+	type GameRoom,
+	type RoomStatus,
+	type UseGameRoomOptions,
+	useGameRoom,
+} from "./useGameRoom.ts";
 export { useWakeLock } from "./useWakeLock.ts";

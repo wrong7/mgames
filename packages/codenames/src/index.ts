@@ -9,10 +9,8 @@ export type {
 	// El tipo se renombra porque `Board` es también el componente que lo pinta.
 	Board as BoardData,
 	CardKind,
-	ClientMessage,
 	GameAction,
 	GameState,
-	ServerMessage,
 	Team,
 } from "./engine/index.ts";
 export {
@@ -22,8 +20,7 @@ export {
 	buildBoard,
 	CARD_COUNT,
 	createGame,
-	parseClientMessage,
-	parseServerMessage,
+	engine,
 	remainingFor,
 	WORDS,
 } from "./engine/index.ts";

@@ -16,7 +16,7 @@ export const Route = createRootRoute({
 			},
 			{ name: "theme-color", content: "#1a1a1a" },
 			{ name: "mobile-web-app-capable", content: "yes" },
-			{ title: "mgames · juegos para jugar en persona" },
+			{ title: "No mires · juegos para jugar en persona" },
 			{
 				name: "description",
 				content:

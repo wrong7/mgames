@@ -1,11 +1,11 @@
 import { randomCode } from "@mgames/game-kit";
-import { useWakeLock } from "@mgames/game-kit/react";
+import { useGameRoom, useWakeLock } from "@mgames/game-kit/react";
 import { useState } from "react";
-import type { Team } from "../engine/index.ts";
+import { engine, type Team } from "../engine/index.ts";
+import { manifest } from "../manifest.ts";
 import { COLORS } from "../theme.ts";
 import { Board } from "./Board.tsx";
 import { Scoreboard } from "./Scoreboard.tsx";
-import { useGameRoom } from "./useGameRoom.ts";
 
 /** Desde qué lado de la mesa se mira el tablero. */
 export type Role = "master" | "agente";
@@ -31,7 +31,17 @@ export interface GameScreenProps {
  * lo único que cambia es cuánto se enseña.
  */
 export function GameScreen({ code, role, realtimeUrl, onExit }: GameScreenProps) {
-	const { state, status, synced, dispatch } = useGameRoom(code, realtimeUrl);
+	const {
+		view: state,
+		status,
+		synced,
+		dispatch,
+	} = useGameRoom({
+		engine,
+		game: manifest.slug,
+		code,
+		realtimeUrl,
+	});
 	const isMaster = role === "master";
 
 	// Una partida son veinte minutos mirando el tablero a ratos y hablando el resto.

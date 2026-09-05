@@ -10,7 +10,8 @@
 	},
 	"dependencies": {
 		"@mgames/codenames": "workspace:*",
-		"@mgames/game-kit": "workspace:*"
+		"@mgames/game-kit": "workspace:*",
+		"@mgames/spy": "workspace:*"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^5.20260905.1",

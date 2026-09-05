@@ -26,6 +26,9 @@ importers:
       '@mgames/game-kit':
         specifier: workspace:*
         version: link:../../packages/game-kit
+      '@mgames/spy':
+        specifier: workspace:*
+        version: link:../../packages/spy
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^5.20260905.1
@@ -45,6 +48,9 @@ importers:
       '@mgames/game-kit':
         specifier: workspace:*
         version: link:../../packages/game-kit
+      '@mgames/spy':
+        specifier: workspace:*
+        version: link:../../packages/spy
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.3.3(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0))
@@ -119,6 +125,25 @@ importers:
 
   packages/game-kit:
     dependencies:
+      react:
+        specifier: '>=19'
+        version: 19.2.8
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.2.18
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  packages/spy:
+    dependencies:
+      '@mgames/game-kit':
+        specifier: workspace:*
+        version: link:../game-kit
       react:
         specifier: '>=19'
         version: 19.2.8
