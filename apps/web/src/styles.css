@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/*
+ * Los juegos viven en `packages/*` y traen su propia interfaz, así que Tailwind
+ * tiene que rastrear también sus fuentes: si no, sus clases no llegan al CSS
+ * final y el juego se despliega sin estilos.
+ */
+@source "../../../packages/codenames/src";
+@source "../../../packages/game-kit/src";
+
+@theme {
+	--font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	min-height: 100%;
+	margin: 0;
+	/* La web se juega de pie y en grupo: nadie quiere el rebote elástico ni un
+	   zoom accidental al pasar el móvil de mano en mano. */
+	overscroll-behavior: none;
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	font-family: var(--font-sans);
+	/* El tablero llena la pantalla: el scroll sólo puede ser un accidente. */
+	overflow: hidden;
+}
+
+/* Quitamos el resalte azul de iOS al tocar: las cartas ya tienen su propia
+   respuesta al pulsar y el doble efecto se ve sucio. */
+button {
+	-webkit-tap-highlight-color: transparent;
+}

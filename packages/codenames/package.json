@@ -1,0 +1,26 @@
+{
+	"name": "@mgames/codenames",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./engine": "./src/engine/index.ts",
+		"./styles.css": "./src/styles.css"
+	},
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"test": "node --test --experimental-strip-types \"src/**/*.test.ts\""
+	},
+	"dependencies": {
+		"@mgames/game-kit": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^22.10.2",
+		"@types/react": "^19.2.0",
+		"typescript": "^6.0.2"
+	},
+	"peerDependencies": {
+		"react": ">=19"
+	}
+}

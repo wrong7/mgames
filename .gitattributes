@@ -1,0 +1,5 @@
+# El repo se edita en Windows y se construye en Linux (Vercel, Cloudflare):
+# normalizar aquí evita que cada commit desde una u otra máquina reescriba
+# ficheros enteros por el final de línea.
+* text=auto eol=lf
+pnpm-lock.yaml -diff linguist-generated

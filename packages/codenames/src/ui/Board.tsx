@@ -1,0 +1,42 @@
+import type { Board as BoardData, CardKind } from "../engine/index.ts";
+import { Card } from "./Card.tsx";
+
+export interface BoardProps {
+	board: BoardData;
+	revealed: readonly boolean[];
+	/**
+	 * Si es `true` se ve el color de las 25 cartas (pantalla del jefe de espías);
+	 * si es `false`, sólo el de las que ya se han destapado.
+	 */
+	showAllKinds: boolean;
+	onCardPress?: (index: number) => void;
+	disabled?: boolean;
+}
+
+/** La rejilla de 5x5. Ocupa todo el alto disponible y no hace scroll. */
+export function Board({ board, revealed, showAllKinds, onCardPress, disabled }: BoardProps) {
+	return (
+		<div
+			// El contenedor de consulta que usan las cartas para dimensionar su texto.
+			className="grid min-h-0 flex-1 grid-cols-5 grid-rows-5 gap-1.5 [container-type:inline-size]"
+		>
+			{board.words.map((word, index) => {
+				const isRevealed = revealed[index] === true;
+				const kind: CardKind | null =
+					showAllKinds || isRevealed ? (board.kinds[index] ?? null) : null;
+				return (
+					<Card
+						// Las palabras de un tablero son únicas, así que sirven de clave estable
+						// aunque cambie el reparto.
+						key={word}
+						word={word}
+						kind={kind}
+						revealed={isRevealed}
+						disabled={disabled}
+						onClick={onCardPress ? () => onCardPress(index) : undefined}
+					/>
+				);
+			})}
+		</div>
+	);
+}

@@ -1,0 +1,27 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "mgames-realtime",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-01",
+	"observability": { "enabled": true },
+
+	// Cada sala es un Durable Object: un objeto con su propio hilo y su propia
+	// memoria, que es exactamente la unidad de aislamiento que queremos aquí.
+	"durable_objects": {
+		"bindings": [{ "name": "GAME_ROOM", "class_name": "GameRoom" }]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			// Los Durable Objects con almacenamiento SQLite son los únicos disponibles
+			// en el plan gratuito, y son también los que admiten hibernación.
+			"new_sqlite_classes": ["GameRoom"]
+		}
+	],
+
+	"vars": {
+		// Orígenes que pueden abrir salas, separados por comas. En blanco = cualquiera,
+		// que es lo que queremos en local.
+		"ALLOWED_ORIGINS": ""
+	}
+}
