@@ -2,4 +2,5 @@
 # normalizar aquí evita que cada commit desde una u otra máquina reescriba
 # ficheros enteros por el final de línea.
 * text=auto eol=lf
-pnpm-lock.yaml -diff linguist-generated
+# El lockfile se colapsa en las revisiones, pero sigue siendo texto diffeable.
+pnpm-lock.yaml linguist-generated=true
