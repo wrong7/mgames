@@ -1,5 +1,6 @@
 import type { PlayerProfile, RoomView } from "@mgames/game-kit";
 import { Avatar } from "@mgames/game-kit/react";
+import { useEffect, useState } from "react";
 import { GAMES } from "../games.ts";
 
 export interface RoomLobbyProps {
@@ -53,6 +54,8 @@ export function RoomLobby({ code, room, profile, live, onSelectGame, onLeave }: 
 				</div>
 				<div className="w-11" aria-hidden="true" />
 			</header>
+
+			<CopyLink code={code} />
 
 			<section>
 				<h2 className="mb-2 text-xs uppercase tracking-[0.3em] text-white/50">
@@ -132,5 +135,50 @@ export function RoomLobby({ code, room, profile, live, onSelectGame, onLeave }: 
 				</ul>
 			</section>
 		</main>
+	);
+}
+
+/**
+ * El enlace de la sala, para mandarlo por el grupo en vez de dictar el código.
+ *
+ * Copiar al portapapeles necesita un gesto del usuario y una página segura
+ * (https o localhost); si el navegador no lo permite, se recurre al diálogo de
+ * compartir del sistema, que en móvil es incluso más útil.
+ */
+function CopyLink({ code }: { code: string }) {
+	const [copied, setCopied] = useState(false);
+
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(false), 2000);
+		return () => clearTimeout(timer);
+	}, [copied]);
+
+	const share = async () => {
+		const url = `${window.location.origin}/sala/${code}`;
+		try {
+			await navigator.clipboard.writeText(url);
+			setCopied(true);
+		} catch {
+			if (navigator.share) {
+				await navigator.share({ title: `Sala ${code}`, url }).catch(() => {});
+			} else {
+				// Sin portapapeles ni diálogo: que al menos se vea para copiarlo a mano.
+				window.prompt("Copia el enlace de la sala", url);
+			}
+		}
+	};
+
+	return (
+		<button
+			type="button"
+			onClick={share}
+			className={[
+				"mx-auto -mt-2 flex items-center gap-2 rounded-full px-4 py-2 text-xs uppercase tracking-widest active:scale-95",
+				copied ? "bg-green-400 text-black" : "bg-white/10 text-white/80",
+			].join(" ")}
+		>
+			{copied ? "✓ Enlace copiado" : "Copiar enlace de la sala"}
+		</button>
 	);
 }
