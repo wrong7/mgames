@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "wrangler dev",
+		"dev": "wrangler dev --var ALLOWED_ORIGINS:",
 		"deploy": "wrangler deploy",
 		"check-types": "tsc --noEmit"
 	},

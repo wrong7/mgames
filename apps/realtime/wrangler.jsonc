@@ -20,8 +20,9 @@
 	],
 
 	"vars": {
-		// Orígenes que pueden abrir salas, separados por comas. En blanco = cualquiera,
-		// que es lo que queremos en local.
-		"ALLOWED_ORIGINS": ""
+		// Orígenes que pueden abrir salas, separados por comas y sin barra final
+		// (es lo que manda el navegador). En blanco = cualquiera: es lo que usa
+		// `pnpm dev`, que la vacía con `--var` para poder jugar desde localhost.
+		"ALLOWED_ORIGINS": "https://malitos.vercel.app"
 	}
 }

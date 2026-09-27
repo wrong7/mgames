@@ -217,9 +217,18 @@ o pecas son planos, sin relieve; las gafas y los gorros sí son objetos.
 
 ## Despliegue
 
-- **Web** → Vercel (`apps/web/vercel.json` ya declara el framework). Hay que
-  configurar `VITE_REALTIME_URL` apuntando al Worker.
-- **Salas** → Cloudflare Workers: `pnpm --filter @mgames/realtime deploy`.
-  Conviene rellenar la variable `ALLOWED_ORIGINS` en `wrangler.jsonc` con el
-  dominio de la web: los WebSockets no pasan por CORS, así que esa comprobación
-  es lo único que evita que otra web abra salas contra el servidor.
+- **Web** → Vercel, en `https://malitos.vercel.app` (`apps/web/vercel.json` ya
+  declara el framework). La URL del Worker está en `apps/web/.env.production`:
+  no es un secreto, porque acaba dentro de la web igualmente, y así cada
+  despliegue la lleva sin tocar el panel de Vercel (si allí se define
+  `VITE_REALTIME_URL`, gana ésa). Se mete en la web al compilar: cambiarla pide
+  volver a desplegar.
+- **Salas** → Cloudflare Workers: `pnpm --filter @mgames/realtime run deploy`. Con
+  `run`: sin él, pnpm ejecuta su propio `pnpm deploy`, que no despliega nada
+  sino que copia el paquete a una carpeta.
+  `ALLOWED_ORIGINS`, en `wrangler.jsonc`, lleva los orígenes de la web (sin
+  barra final, que es como los manda el navegador): los WebSockets no pasan por
+  CORS, así que esa comprobación es lo único que evita que otra web abra salas
+  contra el servidor. `pnpm dev` la vacía con `--var` para poder jugar desde
+  localhost; las previews de Vercel, con otra URL en cada despliegue, no entran
+  si no se añaden.
