@@ -8,6 +8,12 @@
 export const MIN_PLAYERS = 3;
 export const MAX_PLAYERS = 8;
 
+/**
+ * La cuenta atrás entre que el último dice "listo" y el reparto: lo justo para
+ * que todos miren su móvil a la vez, y para echarse atrás si hacía falta.
+ */
+export const DEAL_COUNTDOWN_MS = 3000;
+
 /** A partir de esta mesa, un solo espía se queda corto y la ronda se hace larga. */
 const TWO_SPIES_FROM = 7;
 

@@ -36,6 +36,15 @@ export interface Round {
 export interface SpyState {
 	phase: Phase;
 	round: Round | null;
+	/** Quién ha dicho "listo" para la ronda que viene. Sólo cuenta en la sala. */
+	ready: Readonly<Record<string, true>>;
+	/**
+	 * Cuándo se reparte, con la hora del servidor: están todos listos y corre la
+	 * cuenta atrás. `null` mientras falte alguien.
+	 */
+	dealAt: number | null;
+	/** Rondas repartidas en la partida: con la semilla de la sala, dan la de cada una. */
+	dealt: number;
 	updatedAt: number;
 }
 
@@ -48,6 +57,9 @@ export type Card = { kind: "espia" } | { kind: "agente"; location: string; role:
  * Nunca incluye el reparto de los demás: si estuviera, bastaría abrir las
  * herramientas de desarrollo para saber quién es el espía, y el juego entero
  * consiste en no saberlo.
+ *
+ * Tampoco la lista de sitios posibles: con ella delante, el espía elegía de un
+ * catálogo en vez de sacar el sitio de lo que oye.
  */
 export interface SpyView {
 	phase: Phase;
@@ -60,15 +72,25 @@ export interface SpyView {
 	 * cara, no sólo con el nombre: el final se cuenta enseñando quién era.
 	 */
 	reveal: { location: string; spies: readonly SpyPlayer[] } | null;
-	/** El catálogo de localizaciones posibles. Público desde el principio. */
-	locations: readonly string[];
+	/** Quién ha dicho "listo" para la ronda que viene. Vacío durante la ronda. */
+	ready: readonly string[];
+	/** Cuándo se reparte (hora de la sala), si ya están todos listos. */
+	dealAt: number | null;
 	updatedAt: number;
 }
 
 export type SpyAction =
-	/** Repartir una ronda nueva a quien esté en la sala. La semilla la pone quien reparte. */
-	| { type: "repartir"; seed: string }
+	/**
+	 * "Listo" para la ronda que viene, o ya no. Cuando lo están todos los de la
+	 * sala, empieza la cuenta atrás y al acabar se reparte solo.
+	 */
+	| { type: "listo"; ready: boolean }
+	/**
+	 * Aviso de un móvil: le parece que toca empezar la cuenta, pararla o repartir
+	 * (ver `dealStep`). El motor lo comprueba con su hora y con la gente de la sala.
+	 */
+	| { type: "avanzar" }
 	/** Destapar: se acabó, que se vea quién era. */
 	| { type: "revelar" }
-	/** Volver a la mesa sin ronda, para repartir otra. */
+	/** Volver a la mesa sin ronda: para la siguiente, otra vez todos listos. */
 	| { type: "volver" };

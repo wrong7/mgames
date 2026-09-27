@@ -1,11 +1,11 @@
 import { createRng, type PlayerProfile } from "@mgames/game-kit";
-import { LOCATION_NAMES, LOCATIONS } from "./locations.ts";
-import { MAX_PLAYERS, MIN_PLAYERS, spyCountFor } from "./rules.ts";
+import { LOCATIONS } from "./locations.ts";
+import { DEAL_COUNTDOWN_MS, MAX_PLAYERS, MIN_PLAYERS, spyCountFor } from "./rules.ts";
 import type { Card, Round, SpyAction, SpyPlayer, SpyState, SpyView } from "./types.ts";
 
 /** Sobre la mesa, sin repartir. */
 export function createGame(_seed: string, now: number = Date.now()): SpyState {
-	return { phase: "sala", round: null, updatedAt: now };
+	return { phase: "sala", round: null, ready: {}, dealAt: null, dealt: 0, updatedAt: now };
 }
 
 /**
@@ -34,6 +34,16 @@ export function deal(players: readonly SpyPlayer[], seed: string): Round {
 	};
 }
 
+/** Lo que el motor necesita saber de cada jugada, además de la jugada. */
+export interface SpyContext {
+	/** La gente de la sala ahora mismo: a quien se espera y a quien se reparte. */
+	players: readonly PlayerProfile[];
+	actorId: string;
+	/** La semilla de la partida: la de cada ronda sale de ésta y de su número. */
+	seed: string;
+	now: number;
+}
+
 /**
  * Aplica una acción. Pura: mismas entradas, mismo resultado, en el navegador y
  * en el servidor.
@@ -41,37 +51,115 @@ export function deal(players: readonly SpyPlayer[], seed: string): Round {
  * Devuelve el mismo objeto cuando la acción no procede. No es un error: los
  * mensajes llegan de varios móviles a la vez y alguno siempre llega tarde.
  */
-export function applyAction(
-	state: SpyState,
-	action: SpyAction,
-	players: readonly PlayerProfile[],
-	now: number = Date.now(),
-): SpyState {
+export function applyAction(stored: SpyState, action: SpyAction, ctx: SpyContext): SpyState {
+	const state = current(stored);
+	const { players, actorId, now } = ctx;
+
 	switch (action.type) {
-		case "repartir": {
-			// Se reparte a quien esté en la sala ahora mismo, dentro de los límites del
-			// juego. Con la ronda empezada no se vuelve a repartir: primero se destapa.
-			if (
-				state.phase === "jugando" ||
-				players.length < MIN_PLAYERS ||
-				players.length > MAX_PLAYERS ||
-				!action.seed
-			) {
-				return state;
-			}
-			return { phase: "jugando", round: deal(players, action.seed), updatedAt: now };
+		case "listo": {
+			// Sólo en la sala y sólo quien está en ella: los demás no se esperan.
+			if (state.phase !== "sala" || !players.some((p) => p.id === actorId)) return stored;
+			if (Boolean(state.ready[actorId]) === action.ready) return stored;
+			const ready = action.ready
+				? { ...state.ready, [actorId]: true as const }
+				: without(state.ready, actorId);
+			return settle({ ...state, ready, updatedAt: now }, ctx);
+		}
+
+		case "avanzar": {
+			const next = settle(state, ctx);
+			return next === state ? stored : next;
 		}
 
 		case "revelar": {
-			if (state.phase !== "jugando") return state;
+			if (state.phase !== "jugando") return stored;
 			return { ...state, phase: "revelado", updatedAt: now };
 		}
 
 		case "volver": {
-			if (state.phase === "sala") return state;
-			return { phase: "sala", round: null, updatedAt: now };
+			if (state.phase === "sala") return stored;
+			return { ...state, phase: "sala", round: null, ready: {}, dealAt: null, updatedAt: now };
 		}
 	}
+}
+
+/**
+ * Qué toca en la sala con esta gente y a esta hora. Es la misma regla en el
+ * motor y en la pantalla, que así sabe cuándo avisar:
+ *
+ * - `contar`: están todos listos y no corre la cuenta atrás, porque el último
+ *   acaba de decirlo o porque se ha ido el único que faltaba.
+ * - `repartir`: están todos listos y la cuenta ha llegado a cero.
+ * - `parar`: corre la cuenta, pero ya no están todos: alguien se ha echado
+ *   atrás o acaba de entrar.
+ */
+export function dealStep(
+	view: Pick<SpyView, "phase" | "ready" | "dealAt">,
+	present: readonly string[],
+	now: number,
+): "contar" | "repartir" | "parar" | null {
+	if (view.phase !== "sala") return null;
+	const all = allReady(view.ready, present);
+	if (all && view.dealAt === null) return "contar";
+	if (all && view.dealAt !== null && now >= view.dealAt) return "repartir";
+	if (!all && view.dealAt !== null) return "parar";
+	return null;
+}
+
+/** Si se puede jugar con la gente de la sala y han dicho listo todos. */
+export function allReady(ready: readonly string[], present: readonly string[]): boolean {
+	return (
+		present.length >= MIN_PLAYERS &&
+		present.length <= MAX_PLAYERS &&
+		present.every((id) => ready.includes(id))
+	);
+}
+
+/** Hace lo que toque en la sala (ver `dealStep`); la misma sala si no toca nada. */
+function settle(state: SpyState, { players, seed, now }: SpyContext): SpyState {
+	const present = players.map((p) => p.id);
+	const step = dealStep(
+		{ phase: state.phase, ready: Object.keys(state.ready), dealAt: state.dealAt },
+		present,
+		now,
+	);
+	switch (step) {
+		case "contar":
+			return { ...state, dealAt: now + DEAL_COUNTDOWN_MS, updatedAt: now };
+		case "parar":
+			return { ...state, dealAt: null, updatedAt: now };
+		case "repartir": {
+			// Cada ronda, su semilla: la de la partida, que no sale del servidor, y su
+			// número. Así nadie elige el reparto desde su móvil.
+			const dealt = state.dealt + 1;
+			return {
+				phase: "jugando",
+				round: deal(players, `${seed}/ronda-${dealt}`),
+				ready: {},
+				dealAt: null,
+				dealt,
+				updatedAt: now,
+			};
+		}
+		case null:
+			return state;
+	}
+}
+
+/** Las partidas guardadas antes del "listo" no traen sus campos: se completan. */
+function current(state: SpyState): SpyState {
+	const stored: Partial<SpyState> = state;
+	if (stored.ready && stored.dealAt !== undefined && stored.dealt !== undefined) return state;
+	return {
+		...state,
+		ready: stored.ready ?? {},
+		dealAt: stored.dealAt ?? null,
+		dealt: stored.dealt ?? 0,
+	};
+}
+
+function without(record: Readonly<Record<string, true>>, key: string): Record<string, true> {
+	return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
 }
 
 /**
@@ -81,14 +169,17 @@ export function applyAction(
  * servidor y cada uno recibe su carta y nada más. Hasta que la ronda se destapa,
  * y entonces se ve todo.
  */
-export function project(state: SpyState, actorId: string): SpyView {
+export function project(stored: SpyState, actorId: string): SpyView {
+	const state = current(stored);
+	const sala = state.phase === "sala";
 	const base = {
 		phase: state.phase,
-		locations: LOCATION_NAMES,
+		ready: sala ? Object.keys(state.ready) : [],
+		dealAt: sala ? state.dealAt : null,
 		updatedAt: state.updatedAt,
 	};
 
-	if (!state.round || state.phase === "sala") {
+	if (!state.round || sala) {
 		return { ...base, participants: [], card: null, reveal: null };
 	}
 

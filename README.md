@@ -73,7 +73,9 @@ nada.
   tablero no aparece hasta que todos los de la sala están sentados y listos y
   cada equipo tiene al menos un jefe y un agente — lo comprueba el motor, no la
   pantalla. Después, el asiento manda: destapa el jefe del equipo en turno y
-  señalan sus agentes. El Espía reparte directamente a quien esté. Visto y no
+  señalan sus agentes. El Espía reparte cuando todos los de la sala han dicho
+  "listo", tras una cuenta atrás de 3 segundos, y sin enseñar la lista de sitios
+  posibles: el espía tiene que sacar dónde está de lo que oye. Visto y no
   visto va por rondas y cada ronda empieza cuando todos han dicho "listo" (o a
   los 15 segundos del resultado, para que un despistado no pare la mesa): lo
   que pasa en él dura poco más de un segundo, y quien no mira se lo pierde.

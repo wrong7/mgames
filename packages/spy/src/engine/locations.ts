@@ -7,8 +7,8 @@
  * cotidianos como exóticos: si todas fueran espectaculares, el espía las
  * distinguiría por el tono de las preguntas.
  *
- * La lista es pública: todo el mundo la ve durante la partida. Es lo que le da
- * al espía una posibilidad real de acertar, y a los demás una forma de descartar.
+ * La lista no se enseña durante la partida: el espía tiene que sacar el sitio
+ * de lo que oye, no elegirlo de un catálogo.
  */
 export interface Location {
 	name: string;
@@ -297,6 +297,3 @@ export const LOCATIONS: readonly Location[] = [
 		],
 	},
 ];
-
-/** Sólo los nombres: es lo que se enseña a todos durante la partida. */
-export const LOCATION_NAMES: readonly string[] = LOCATIONS.map((location) => location.name);

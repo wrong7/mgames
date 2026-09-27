@@ -11,7 +11,8 @@ import type { SpyAction, SpyState, SpyView } from "./types.ts";
  */
 export const engine: GameEngine<SpyState, SpyAction, SpyView> = {
 	create: ({ seed, now }) => createGame(seed, now),
-	apply: (state, action, { players, now }) => applyAction(state, action, players, now),
+	apply: (state, action, { players, actorId, seed, now }) =>
+		applyAction(state, action, { players, actorId, seed, now }),
 	project,
 	parseAction,
 };
@@ -21,10 +22,9 @@ function parseAction(value: unknown): SpyAction | null {
 	const action = value as Record<string, unknown>;
 
 	switch (action.type) {
-		case "repartir":
-			return typeof action.seed === "string" && action.seed.length > 0
-				? { type: "repartir", seed: action.seed }
-				: null;
+		case "listo":
+			return typeof action.ready === "boolean" ? { type: "listo", ready: action.ready } : null;
+		case "avanzar":
 		case "revelar":
 		case "volver":
 			return { type: action.type };

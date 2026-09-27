@@ -1,8 +1,9 @@
 import type { GameScreenProps, PlayerProfile } from "@mgames/game-kit";
-import { randomCode } from "@mgames/game-kit";
-import { Avatar, useWakeLock } from "@mgames/game-kit/react";
-import { useEffect, useState } from "react";
+import { Avatar, useClock, useNudge, useWakeLock } from "@mgames/game-kit/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+	allReady,
+	dealStep,
 	MAX_PLAYERS,
 	MIN_PLAYERS,
 	type SpyAction,
@@ -11,7 +12,6 @@ import {
 } from "../engine/index.ts";
 import { manifest } from "../manifest.ts";
 import { COLORS } from "../theme.ts";
-import { LocationList } from "./LocationList.tsx";
 import { PlayerList } from "./PlayerList.tsx";
 import { RoleCard } from "./RoleCard.tsx";
 import { Stamp } from "./Stamp.tsx";
@@ -21,11 +21,30 @@ export type SpyScreenProps = GameScreenProps<SpyView, SpyAction>;
 /**
  * El juego entero, en una pantalla que cambia según la fase.
  *
- * No hay asientos ni papeles que elegir: se reparte a quien esté en la sala y
- * lo que ve cada uno depende de lo que le haya tocado.
+ * No hay asientos ni papeles que elegir: cuando todos los de la sala dicen
+ * "listo", cuenta atrás y se reparte, y lo que ve cada uno depende de lo que
+ * le haya tocado.
+ *
+ * La cuenta atrás se lleva con la hora de la sala, la misma en todos los
+ * móviles; al acabar, cada uno avisa al motor, que reparte con la suya.
  */
-export function SpyScreen({ code, profile, players, live, view, play, onExit }: SpyScreenProps) {
+export function SpyScreen({
+	code,
+	profile,
+	players,
+	live,
+	view,
+	play,
+	now,
+	onExit,
+}: SpyScreenProps) {
 	useWakeLock();
+	const present = useMemo(() => players.map((player) => player.id), [players]);
+	// Se repinta en cada segundo de la cuenta atrás, y al acabar.
+	const dealAt = view.phase === "sala" ? view.dealAt : null;
+	const time = useClock(now, dealAt === null ? [] : [dealAt - 2000, dealAt - 1000, dealAt]);
+	const nudge = useCallback(() => play({ type: "avanzar" }), [play]);
+	useNudge(dealStep(view, present, time) !== null, nudge);
 
 	return (
 		<div
@@ -38,7 +57,7 @@ export function SpyScreen({ code, profile, players, live, view, play, onExit }: 
 			}}
 		>
 			<Header code={code} live={live} onExit={onExit} />
-			<Body view={view} players={players} profile={profile} play={play} />
+			<Body view={view} players={players} profile={profile} play={play} time={time} />
 		</div>
 	);
 }
@@ -49,18 +68,24 @@ function Body({
 	players,
 	profile,
 	play,
+	time,
 }: {
 	view: SpyView;
 	players: readonly PlayerProfile[];
 	profile: PlayerProfile;
 	play: (action: SpyAction) => void;
+	/** La hora de la sala en este render. */
+	time: number;
 }) {
 	if (view.phase === "sala") {
 		return (
 			<Waiting
 				players={players}
 				meId={profile.id}
-				onDeal={() => play({ type: "repartir", seed: randomCode(12) })}
+				ready={view.ready}
+				dealAt={view.dealAt}
+				time={time}
+				onReady={(ready) => play({ type: "listo", ready })}
 			/>
 		);
 	}
@@ -98,17 +123,50 @@ function Header({ code, live, onExit }: { code: string; live: boolean; onExit?: 
 	);
 }
 
+/**
+ * La mesa antes de repartir: las instrucciones, quién hay y quién está listo.
+ *
+ * Nadie reparte a mano. Cuando todos los de la sala han dicho "listo", corre
+ * una cuenta atrás de tres segundos, bien grande para que todos miren su móvil
+ * a la vez, y se reparte sola. Quien se echa atrás a tiempo la para.
+ */
 function Waiting({
 	players,
 	meId,
-	onDeal,
+	ready,
+	dealAt,
+	time,
+	onReady,
 }: {
 	players: readonly PlayerProfile[];
 	meId: string;
-	onDeal: () => void;
+	ready: readonly string[];
+	dealAt: number | null;
+	time: number;
+	onReady: (ready: boolean) => void;
 }) {
 	const missing = MIN_PLAYERS - players.length;
 	const extra = players.length - MAX_PLAYERS;
+	const mine = ready.includes(meId);
+	const counting =
+		dealAt !== null &&
+		allReady(
+			ready,
+			players.map((player) => player.id),
+		);
+	const seconds = counting ? Math.max(1, Math.ceil((dealAt - time) / 1000)) : null;
+	const waitingFor = players.filter((player) => !ready.includes(player.id));
+
+	const status =
+		missing > 0
+			? `Falta${missing > 1 ? "n" : ""} ${missing} para empezar`
+			: extra > 0
+				? `Sobra${extra > 1 ? "n" : ""} ${extra}: máximo ${MAX_PLAYERS}`
+				: counting
+					? "¡Todos listos! Toca otra vez para esperar"
+					: mine
+						? `Esperando a ${names(waitingFor)}`
+						: "Se reparte cuando estéis todos listos";
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col justify-between gap-4">
@@ -117,24 +175,57 @@ function Waiting({
 					{manifest.name}
 				</h1>
 				<Briefing />
-				<PlayerList players={players} meId={meId} />
+				<PlayerList players={players} meId={meId} ready={ready} />
 			</div>
 
-			<button
-				type="button"
-				onClick={onDeal}
-				disabled={missing > 0 || extra > 0}
-				className="shrink-0 rounded-2xl py-4 text-lg font-black uppercase tracking-widest active:scale-[0.98] disabled:opacity-40"
-				style={{ backgroundColor: COLORS.gold, color: COLORS.night }}
-			>
-				{missing > 0
-					? `Falta${missing > 1 ? "n" : ""} ${missing} para empezar`
-					: extra > 0
-						? `Sobra${extra > 1 ? "n" : ""} ${extra}: máximo ${MAX_PLAYERS}`
-						: "Repartir"}
-			</button>
+			<div className="flex shrink-0 flex-col gap-2">
+				<p className="min-h-4 text-center text-xs leading-tight opacity-80">{status}</p>
+				<button
+					type="button"
+					onClick={() => onReady(!mine)}
+					aria-pressed={mine}
+					className="rounded-2xl border-2 py-4 text-lg font-black uppercase tracking-widest active:scale-[0.98]"
+					style={
+						mine
+							? { borderColor: COLORS.gold, backgroundColor: "transparent", color: COLORS.gold }
+							: { borderColor: COLORS.gold, backgroundColor: COLORS.gold, color: COLORS.night }
+					}
+				>
+					{mine ? "✓ Listo" : "Estoy listo"}
+				</button>
+			</div>
+
+			{seconds !== null && <Countdown seconds={seconds} />}
 		</div>
 	);
+}
+
+/** El número de la cuenta atrás, encima de todo: que se vea desde el otro lado de la mesa. */
+function Countdown({ seconds }: { seconds: number }) {
+	return (
+		<div
+			className="pointer-events-none fixed inset-0 z-10 flex flex-col items-center justify-center gap-2"
+			style={{
+				background: `radial-gradient(circle, ${COLORS.night}f2 0%, ${COLORS.night}b3 45%, transparent 75%)`,
+			}}
+			role="timer"
+			aria-live="assertive"
+		>
+			<p className="text-xs font-bold uppercase tracking-[0.35em]" style={{ color: COLORS.ink }}>
+				Repartiendo
+			</p>
+			<p className="font-mono text-[9rem] font-black leading-none" style={{ color: COLORS.gold }}>
+				{seconds}
+			</p>
+		</div>
+	);
+}
+
+/** "Ana", "Ana y Bea", "Ana, Bea y Carla". */
+function names(people: readonly PlayerProfile[]): string {
+	const list = people.map((person) => person.name);
+	if (list.length <= 1) return list.join("");
+	return `${list.slice(0, -1).join(", ")} y ${list.at(-1)}`;
 }
 
 /**
@@ -180,8 +271,6 @@ function Playing({ view, meId, onReveal }: { view: SpyView; meId: string; onReve
 		<div className="flex min-h-0 flex-1 flex-col gap-3">
 			<RoleCard card={view.card} />
 			<PlayerList players={view.participants} meId={meId} />
-			{/* Durante la ronda la marca de tiempo es la del reparto: sirve de nombre de la ronda. */}
-			<LocationList locations={view.locations} round={view.updatedAt} />
 			<RevealButton onReveal={onReveal} />
 		</div>
 	);

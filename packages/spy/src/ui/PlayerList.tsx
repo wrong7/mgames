@@ -6,10 +6,15 @@ export interface PlayerListProps {
 	players: readonly { id: string; name: string; avatar: string }[];
 	/** Quién mira, para señalarse en la lista. */
 	meId: string;
+	/** Quién ha dicho "listo", si se está esperando a que lo digan todos. */
+	ready?: readonly string[];
 }
 
-/** Quién está dentro. En la sala sirve para saber si falta alguien por entrar. */
-export function PlayerList({ players, meId }: PlayerListProps) {
+/**
+ * Quién está dentro. En la sala sirve para saber si falta alguien por entrar
+ * y, con `ready`, quién falta por decir que está listo.
+ */
+export function PlayerList({ players, meId, ready }: PlayerListProps) {
 	if (players.length === 0) {
 		return (
 			<p className="text-center text-sm" style={{ color: `${COLORS.ink}88` }}>
@@ -22,6 +27,7 @@ export function PlayerList({ players, meId }: PlayerListProps) {
 		<ul className="flex flex-wrap justify-center gap-1.5">
 			{players.map((player) => {
 				const me = player.id === meId;
+				const set = ready?.includes(player.id) ?? false;
 				return (
 					<li
 						key={player.id}
@@ -30,10 +36,17 @@ export function PlayerList({ players, meId }: PlayerListProps) {
 							backgroundColor: me ? COLORS.gold : COLORS.slate,
 							color: me ? COLORS.night : COLORS.ink,
 							fontWeight: me ? 700 : 400,
+							// Quien falta por decir listo, un poco apagado.
+							opacity: ready && !set ? 0.6 : 1,
 						}}
 					>
 						<Avatar seed={player.avatar} size={22} className="block" />
 						{player.name}
+						{set && (
+							<span role="img" aria-label="listo" className="font-black">
+								✓
+							</span>
+						)}
 					</li>
 				);
 			})}

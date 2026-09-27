@@ -13,6 +13,7 @@ export {
 	type StageInset,
 	type StageVariant,
 } from "./AvatarStage.tsx";
+export { useClock, useNudge } from "./clock.ts";
 export {
 	draftProfile,
 	type ProfileStore,
