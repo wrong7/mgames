@@ -27,7 +27,7 @@ function Sala() {
 	const code = normalizeCode(sala);
 	const profile = useCurrentProfile();
 	const navigate = useNavigate();
-	const { room, status, dispatch, play } = useRoom({
+	const { room, status, dispatch, play, now } = useRoom({
 		code,
 		profile,
 		realtimeUrl: REALTIME_URL,
@@ -56,6 +56,7 @@ function Sala() {
 					live={live}
 					view={room.view}
 					play={play}
+					now={now}
 					onExit={isHost ? () => dispatch({ type: "exitGame" }) : undefined}
 				/>
 			) : (

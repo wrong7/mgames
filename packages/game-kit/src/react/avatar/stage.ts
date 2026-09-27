@@ -1,5 +1,6 @@
 import {
 	AdditiveBlending,
+	CanvasTexture,
 	CircleGeometry,
 	CylinderGeometry,
 	Group,
@@ -11,6 +12,7 @@ import {
 	PlaneGeometry,
 	Raycaster,
 	Scene,
+	SRGBColorSpace,
 	TorusGeometry,
 	Vector2,
 	Vector3,
@@ -45,6 +47,10 @@ import { SlimePuppet } from "./slime-motion.ts";
  *
  * Las piezas de los muñecos (el kit de Blender) se descargan aparte. Mientras
  * llegan ya se ven las peanas; los muñecos caen sobre ellas en cuanto están.
+ *
+ * Al acabar una partida hace de podio: las peanas suben sobre columnas de oro,
+ * plata y bronce, los muñecos caen del último al primero y el que gana no para
+ * de celebrarlo mientras los demás le aplauden.
  */
 
 export interface StageActor {
@@ -53,12 +59,21 @@ export interface StageActor {
 	seed: string;
 	/** Peana con el aro en blanco: para señalar quién mira. */
 	highlight?: boolean;
+	/**
+	 * En el podio, el puesto. El 1, el 2 y el 3 suben a su escalón de oro, plata
+	 * y bronce; los empatados comparten altura, y los demás se quedan en el
+	 * suelo. Fuera del podio no se usa.
+	 */
+	place?: number;
 }
 
-export type StageVariant = "sala" | "solo";
+export type StageVariant = "sala" | "solo" | "podio";
 
 export interface StageOptions {
-	/** `sala`: todos en formación con su nombre. `solo`: uno, grande, para el perfil. */
+	/**
+	 * `sala`: todos en formación con su nombre. `solo`: uno, grande, para el
+	 * perfil. `podio`: los que han ganado, cada uno en el escalón de su puesto.
+	 */
 	variant: StageVariant;
 	/** `prefers-reduced-motion`: casi quietos y sin caídas. */
 	calm: boolean;
@@ -91,6 +106,28 @@ const PEDESTAL_TOP = 0.14;
 const ROW_RISE = 0.85;
 const ROW_DEPTH = 1.3;
 const SPACING = 1.3;
+
+/** La altura del escalón de cada puesto del podio. Del cuarto para abajo, el suelo. */
+const PODIUM_STEP: Readonly<Record<number, number>> = { 1: 1, 2: 0.68, 3: 0.42 };
+/** Entre columnas del podio, casi nada: un podio es un bloque. */
+const PODIUM_SPACING = 1.3;
+
+/** Los colores de cada escalón: el cuerpo, la tapa y el aro que brilla. */
+const MEDALS: Readonly<Record<number, { body: string; top: string; rim: string }>> = {
+	1: { body: "#d9a521", top: "#ffd24d", rim: "#fff0a8" },
+	// Un gris algo verdoso: la luz del estudio es morada y un gris neutro sale lila.
+	2: { body: "#b3c0bb", top: "#e6eeea", rim: "#f4fbf8" },
+	3: { body: "#a9612f", top: "#d98b52", rim: "#ffd3ad" },
+};
+
+/**
+ * Lo que hace cada uno en el podio: el que gana lo celebra a menudo y los
+ * demás le aplauden (y alguno se encoge de hombros).
+ */
+const PODIUM_MOOD = {
+	winner: { gestures: ["celebra", "baile", "salto", "flexiona", "vuelta"], every: [1.2, 2.6] },
+	rest: { gestures: ["aplaude", "aplaude", "saludo", "encoge"], every: [2.2, 4.5] },
+} as const;
 
 /** Lo que el escenario necesita de cada uno, sea muñeco o slime. */
 interface Actor {
@@ -126,9 +163,18 @@ interface Slot {
 	pedestal: Group;
 	/** Sobre la peana: donde se planta el muñeco. */
 	stand: Group;
+	body: Mesh;
+	top: Mesh;
 	rim: Mesh;
+	glow: Mesh;
 	shadow: Mesh;
 	hit: Mesh;
+	/** En el podio: la columna del escalón, que sube desde el suelo, su número y su sombra. */
+	column: Mesh | null;
+	badge: Mesh | null;
+	ground: Mesh | null;
+	/** En el podio, el puesto: de él salen la altura, el color y lo que hace. */
+	place: number | undefined;
 	/** `null` mientras no llegan las piezas de los muñecos. */
 	puppet: Actor | null;
 	/** Hacia dónde mira el muñeco en su sitio. */
@@ -204,7 +250,21 @@ class AvatarStage implements Stage {
 			depthWrite: false,
 		}),
 		invisible: new MeshBasicMaterial({ visible: false }),
+		// El podio: una columna de alto uno que se estira hasta su escalón.
+		column: new CylinderGeometry(PEDESTAL_R - 0.03, PEDESTAL_R + 0.03, 1, 48),
+		badge: new PlaneGeometry(0.4, 0.4),
 	};
+
+	/** Materiales de cada escalón del podio y los números de delante, hechos al pedirlos. */
+	#medals = new Map<
+		number,
+		{
+			body: MeshStandardMaterial;
+			top: MeshStandardMaterial;
+			rim: MeshBasicMaterial;
+			badge: MeshBasicMaterial;
+		}
+	>();
 
 	constructor(renderer: WebGLRenderer, options: StageOptions) {
 		this.#renderer = renderer;
@@ -218,11 +278,16 @@ class AvatarStage implements Stage {
 		this.#scene.environment = studioEnvironment(renderer);
 		this.#scene.environmentIntensity = 1;
 
-		const floor = new Mesh(this.#shared.plane, this.#shared.floor);
-		floor.rotation.x = -Math.PI / 2;
-		floor.scale.setScalar(options.variant === "solo" ? 4 : 11);
-		floor.position.y = -0.005;
-		this.#scene.add(floor);
+		// El resplandor morado del suelo es del escenario de la sala, que va sobre
+		// su cielo morado. El podio sale dentro de los juegos, cada uno con su
+		// fondo, y ahí sería una mancha: cada columna lleva su sombra y basta.
+		if (options.variant !== "podio") {
+			const floor = new Mesh(this.#shared.plane, this.#shared.floor);
+			floor.rotation.x = -Math.PI / 2;
+			floor.scale.setScalar(options.variant === "solo" ? 4 : 11);
+			floor.position.y = -0.005;
+			this.#scene.add(floor);
+		}
 
 		if (!this.#kit) {
 			loadKit().then(
@@ -238,6 +303,7 @@ class AvatarStage implements Stage {
 	setActors(actors: readonly StageActor[]): void {
 		const wanted = new Set(actors.map((actor) => actor.id));
 		const fresh: Slot[] = [];
+		const podium = this.#options.variant === "podio";
 
 		for (const actor of actors) {
 			const slot = this.#slots.get(actor.id);
@@ -247,8 +313,13 @@ class AvatarStage implements Stage {
 				fresh.push(created);
 				continue;
 			}
-			slot.rim.material = actor.highlight ? this.#shared.rimHighlight : this.#shared.rimMaterial;
-			if (slot.removing) {
+			// Quien pasa a ganar (o deja de hacerlo) cambia de humor: vuelve a salir con el nuevo.
+			const moodChanged = podium && (slot.place === 1) !== (actor.place === 1);
+			slot.place = actor.place;
+			this.#dress(slot, actor.highlight ?? false);
+			if (moodChanged && !slot.removing) {
+				this.#swapPuppet(slot, actor.seed);
+			} else if (slot.removing) {
 				// Volvió antes de terminar de irse: se queda donde estaba.
 				slot.removing = false;
 				this.#swapPuppet(slot, actor.seed);
@@ -268,10 +339,13 @@ class AvatarStage implements Stage {
 		this.#layout(fresh);
 
 		// Los que ya estaban cuando se abre la sala entran en cascada; los que
-		// llegan después, de uno en uno según llegan.
+		// llegan después, de uno en uno según llegan. En el podio suben al revés,
+		// del último al primero, como en una entrega de medallas: el que gana, al
+		// final, cuando ya están todos mirando.
 		const stagger = this.#firstBatch ? 0.14 : 0;
 		fresh.forEach((slot, i) => {
-			slot.puppet?.enter("cae", 0.15 + i * stagger);
+			const delay = podium ? 0.6 + (fresh.length - 1 - i) * 0.55 : 0.15 + i * stagger;
+			slot.puppet?.enter("cae", delay);
 		});
 		if (actors.length > 0) this.#firstBatch = false;
 	}
@@ -317,10 +391,17 @@ class AvatarStage implements Stage {
 			shared.inlay,
 			shared.plane,
 			shared.hit,
+			shared.column,
+			shared.badge,
 		])
 			geometry.dispose();
 		for (const material of [shared.glow, shared.shadow, shared.floor]) material.map?.dispose();
 		for (const material of Object.values(shared)) if ("isMaterial" in material) material.dispose();
+		for (const medal of this.#medals.values()) {
+			medal.badge.map?.dispose();
+			for (const material of Object.values(medal)) material.dispose();
+		}
+		this.#medals.clear();
 		this.#renderer.dispose();
 		// Soltar el contexto ya, sin esperar al recolector: los móviles dan pocos
 		// y entrar y salir de la sala varias veces los agotaría.
@@ -369,6 +450,26 @@ class AvatarStage implements Stage {
 		hit.position.y = 1.2;
 		group.add(hit);
 
+		// En el podio, bajo la peana va la columna del escalón con su número
+		// delante y su sombra en el suelo. Empiezan sin alto: suben desde el
+		// suelo con la peana encima.
+		let column: Mesh | null = null;
+		let badge: Mesh | null = null;
+		let ground: Mesh | null = null;
+		if (this.#options.variant === "podio") {
+			column = new Mesh(shared.column, shared.bodyMaterial);
+			column.castShadow = true;
+			column.receiveShadow = true;
+			column.scale.set(1, 0.001, 1);
+			badge = new Mesh(shared.badge, shared.invisible);
+			badge.position.z = PEDESTAL_R + 0.03;
+			badge.visible = false;
+			ground = new Mesh(shared.plane, shared.shadow);
+			ground.rotation.x = -Math.PI / 2;
+			ground.scale.setScalar(PEDESTAL_R * 3.4);
+			group.add(column, badge, ground);
+		}
+
 		this.#scene.add(group);
 		const slot: Slot = {
 			id: actor.id,
@@ -376,25 +477,82 @@ class AvatarStage implements Stage {
 			group,
 			pedestal,
 			stand,
+			body,
+			top,
 			rim,
+			glow,
 			shadow,
 			hit,
-			puppet: this.#kit ? this.#makePuppet(this.#kit, actor.seed) : null,
+			column,
+			badge,
+			ground,
+			place: actor.place,
+			puppet: this.#kit ? this.#makePuppet(this.#kit, actor.seed, actor.place) : null,
 			facing: 0,
 			leaving: [],
 			spot: { x: 0, y: 0, z: 0, row: 0 },
 			grown: 0,
 			removing: false,
 		};
+		this.#dress(slot, actor.highlight ?? false);
 		if (slot.puppet) this.#mount(slot, slot.puppet);
 		return slot;
 	}
 
-	#makePuppet(kit: Kit, seed: string): Actor {
+	/** La peana del color que le toca: la de siempre, o la del escalón de su puesto en el podio. */
+	#dress(slot: Slot, highlight: boolean): void {
+		const shared = this.#shared;
+		const medal = this.#medal(slot.place);
+		slot.body.material = medal?.body ?? shared.bodyMaterial;
+		slot.top.material = medal?.top ?? shared.topMaterial;
+		slot.rim.material = highlight ? shared.rimHighlight : (medal?.rim ?? shared.rimMaterial);
+		if (slot.column) slot.column.material = medal?.body ?? shared.bodyMaterial;
+		if (slot.badge) slot.badge.material = medal?.badge ?? shared.invisible;
+		// El resplandor de la peana es de la sala, como el del suelo; en lo alto
+		// de una columna, además, se quedaría flotando.
+		slot.glow.visible = this.#options.variant !== "podio";
+	}
+
+	/** Los materiales del escalón de un puesto, o nada si ese puesto no sube al podio. */
+	#medal(place: number | undefined) {
+		if (this.#options.variant !== "podio" || place === undefined) return undefined;
+		const colors = MEDALS[place];
+		if (!colors) return undefined;
+		let medal = this.#medals.get(place);
+		if (!medal) {
+			medal = {
+				// Mates, como los muñecos: con brillo de metal reflejarían la cúpula
+				// morada del estudio y la plata saldría lila.
+				body: new MeshStandardMaterial({ color: colors.body, roughness: 0.75, metalness: 0.05 }),
+				top: new MeshStandardMaterial({ color: colors.top, roughness: 0.6, metalness: 0.05 }),
+				rim: new MeshBasicMaterial({ color: colors.rim, toneMapped: false }),
+				badge: new MeshBasicMaterial({
+					map: placeTexture(place),
+					transparent: true,
+					depthWrite: false,
+					toneMapped: false,
+				}),
+			};
+			this.#medals.set(place, medal);
+		}
+		return medal;
+	}
+
+	#makePuppet(kit: Kit, seed: string, place?: number): Actor {
 		const look = avatarLook(seed);
 		const solo = this.#options.variant === "solo";
 		const build = { faceSize: solo ? 512 : 256 };
-		const motion: PuppetOptions = { calm: this.#options.calm, every: solo ? [2.5, 6] : [4, 11] };
+		const mood =
+			this.#options.variant !== "podio"
+				? undefined
+				: place === 1
+					? PODIUM_MOOD.winner
+					: PODIUM_MOOD.rest;
+		const motion: PuppetOptions = {
+			calm: this.#options.calm,
+			every: mood?.every ?? (solo ? [2.5, 6] : [4, 11]),
+			gestures: mood?.gestures,
+		};
 		if (this.#options.style === "slime") {
 			return new SlimePuppet(buildSlime(look, kit, build), look.tempo, look.favorite, motion);
 		}
@@ -418,7 +576,7 @@ class AvatarStage implements Stage {
 			slot.puppet = null;
 			return;
 		}
-		const puppet = this.#makePuppet(this.#kit, seed);
+		const puppet = this.#makePuppet(this.#kit, seed, slot.place);
 		puppet.facing = slot.facing;
 		// El slime de antes tarda más en irse (se derrite): el nuevo brota del charco.
 		const wait = this.#options.style === "slime" ? 0.45 : 0.12;
@@ -431,14 +589,16 @@ class AvatarStage implements Stage {
 	#arrive(kit: Kit): void {
 		if (this.#disposed) return;
 		this.#kit = kit;
-		let delay = 0.1;
-		for (const id of this.#order) {
+		// En el podio, del último al primero, como al montar (ver `setActors`).
+		const podium = this.#options.variant === "podio";
+		let delay = podium ? 0.3 : 0.1;
+		for (const id of podium ? [...this.#order].reverse() : this.#order) {
 			const slot = this.#slots.get(id);
 			if (!slot || slot.puppet || slot.removing) continue;
-			const puppet = this.#makePuppet(kit, slot.seed);
+			const puppet = this.#makePuppet(kit, slot.seed, slot.place);
 			puppet.facing = slot.facing;
 			puppet.enter("cae", delay);
-			delay += 0.14;
+			delay += podium ? 0.55 : 0.14;
 			this.#mount(slot, puppet);
 			slot.puppet = puppet;
 		}
@@ -448,13 +608,15 @@ class AvatarStage implements Stage {
 	/** Manda a cada uno a su sitio y encuadra. Los recién llegados aparecen ya en él. */
 	#layout(fresh: readonly Slot[]): void {
 		const spots = this.#formation(this.#order.length);
+		// Las columnas del podio salen del suelo: el recién llegado empieza abajo y sube.
+		const rise = this.#options.variant === "podio";
 		this.#order.forEach((id, index) => {
 			const slot = this.#slots.get(id) as Slot;
 			const spot = spots[index] as Spot;
 			const moved =
 				Math.hypot(slot.spot.x - spot.x, slot.spot.z - spot.z, slot.spot.y - spot.y) > 0.2;
 			slot.spot = spot;
-			if (fresh.includes(slot)) slot.group.position.set(spot.x, spot.y, spot.z);
+			if (fresh.includes(slot)) slot.group.position.set(spot.x, rise ? 0 : spot.y, spot.z);
 			else if (moved) slot.puppet?.hop();
 			slot.facing =
 				this.#options.variant === "solo" ? this.#turn.solo : -spot.x * this.#turn.toCenter;
@@ -471,6 +633,7 @@ class AvatarStage implements Stage {
 	 * de delante.
 	 */
 	#formation(count: number): Spot[] {
+		if (this.#options.variant === "podio") return this.#podium(count);
 		if (count <= 1) return [{ x: 0, y: 0, z: 0, row: 0 }];
 
 		const perRow = this.#perRow(count);
@@ -513,6 +676,21 @@ class AvatarStage implements Stage {
 	}
 
 	/**
+	 * El podio: el primero en el centro, el segundo a su derecha (la izquierda
+	 * de quien mira), el tercero al otro lado y los demás, si los hay, hacia
+	 * fuera. Todos en la misma línea, cada uno a la altura de su escalón.
+	 */
+	#podium(count: number): Spot[] {
+		const columns = centerOut(count);
+		return this.#order.map((id, rank) => {
+			const place = this.#slots.get(id)?.place;
+			const offset = (columns[rank] as number) - (count - 1) / 2;
+			const step = place === undefined ? 0 : (PODIUM_STEP[place] ?? 0);
+			return { x: offset * PODIUM_SPACING, y: step, z: 0, row: 0 };
+		});
+	}
+
+	/**
 	 * Cuántos por fila: el reparto con el que salen más grandes. Una fila más
 	 * ancha pide alejar la cámara a lo ancho y una grada más, a lo alto; en un
 	 * móvil en vertical suelen ganar dos filas, y en una pantalla apaisada, una
@@ -546,7 +724,9 @@ class AvatarStage implements Stage {
 	 */
 	#frameCamera(): void {
 		const { width, height } = this.#view;
-		const solo = this.#options.variant === "solo";
+		const variant = this.#options.variant;
+		const solo = variant === "solo";
+		const podium = variant === "podio";
 		const active = this.#order
 			.map((id) => this.#slots.get(id))
 			.filter((slot): slot is Slot => slot !== undefined && !slot.removing);
@@ -556,24 +736,29 @@ class AvatarStage implements Stage {
 		for (const slot of active) {
 			const { x, y, z } = slot.spot;
 			const top = y + PEDESTAL_TOP + Math.max(slot.puppet?.rig.height ?? 0, this.#tall) + 0.05;
+			// En el podio se encuadra desde el suelo: las columnas también cuentan.
+			const bottom = podium ? 0 : y;
 			for (const dx of [-PEDESTAL_R, PEDESTAL_R]) {
 				for (const dz of [-PEDESTAL_R, PEDESTAL_R]) {
-					points.push(new Vector3(x + dx, y, z + dz), new Vector3(x + dx, top, z + dz));
+					points.push(new Vector3(x + dx, bottom, z + dz), new Vector3(x + dx, top, z + dz));
 				}
 			}
 		}
 		if (points.length === 0) points.push(new Vector3(-1, 0, 0), new Vector3(1, 2, 0));
-		if (!solo && active.length <= 2) {
+		if (variant === "sala" && active.length <= 2) {
 			// Uno o dos solos no llenan el escenario: se deja sitio a los que vienen.
 			points.push(new Vector3(-2, 0, 0), new Vector3(2, 0, 0));
 		}
 
 		// Márgenes en píxeles: abajo, sitio para los nombres bajo las peanas;
 		// arriba, para los de las gradas, que van sobre la cabeza. El muñeco
-		// solo necesita aire para saltar y dejar sitio a los botones de debajo.
+		// solo necesita aire para saltar y dejar sitio a los botones de debajo;
+		// en el podio, el que gana salta al celebrarlo y los nombres ocupan dos líneas.
 		const margin = solo
 			? { top: 56, bottom: 64, side: 32 }
-			: { top: tiers ? 34 : 10, bottom: 34, side: 12 };
+			: podium
+				? { top: 30, bottom: 52, side: 12 }
+				: { top: tiers ? 34 : 10, bottom: 34, side: 12 };
 		const safe = {
 			left: -1 + (2 * margin.side) / width,
 			right: 1 - (2 * margin.side) / width,
@@ -668,6 +853,20 @@ class AvatarStage implements Stage {
 			slot.grown += (goal - slot.grown) * Math.min(1, dt * (goal > slot.grown ? 6 : 9));
 			slot.pedestal.scale.setScalar(Math.max(0.001, grow(slot.grown)));
 
+			// La columna del podio llega del suelo a la peana, que va subiendo, y
+			// el número sale en cuanto cabe en ella.
+			if (slot.column && slot.badge && slot.ground) {
+				const rise = Math.max(slot.group.position.y, 0.001);
+				const width = Math.max(0.001, grow(slot.grown));
+				slot.column.scale.set(width, rise, width);
+				slot.column.position.y = -rise / 2;
+				slot.badge.position.y = -rise / 2;
+				slot.badge.visible = rise > 0.3 && slot.grown > 0.5;
+				// La sombra se queda en el suelo mientras la peana sube.
+				slot.ground.position.y = -rise + 0.002;
+				slot.ground.scale.setScalar(PEDESTAL_R * 3.4 * width);
+			}
+
 			// Sombra de contacto: más pequeña y clara cuanto más alto salta.
 			const root = slot.puppet?.rig.root;
 			const lift = Math.max(0, root?.position.y ?? 0);
@@ -700,15 +899,17 @@ class AvatarStage implements Stage {
 	/** Los nombres son HTML (nítidos, accesibles); aquí sólo se colocan. */
 	#placeLabels(): void {
 		if (this.#options.variant === "solo") return;
+		// En el podio, en el suelo delante de cada columna, como la placa de un trofeo.
+		const podium = this.#options.variant === "podio";
 		const { width, height } = this.#view;
 		const point = new Vector3();
 		for (const slot of this.#slots.values()) {
 			const element = this.#options.label(slot.id);
 			if (!element) continue;
 			const { x, y, z } = slot.group.position;
-			const above = slot.spot.row > 0;
+			const above = !podium && slot.spot.row > 0;
 			if (above) point.set(x, y + PEDESTAL_TOP + (slot.puppet?.rig.height ?? this.#tall) + 0.1, z);
-			else point.set(x, y, z + PEDESTAL_R);
+			else point.set(x, podium ? 0 : y, z + PEDESTAL_R);
 			point.project(this.#camera);
 			const px = ((point.x + 1) / 2) * width;
 			const py = ((1 - point.y) / 2) * height;
@@ -724,6 +925,30 @@ function centerOut(count: number): number[] {
 	return Array.from({ length: count }, (_, i) => i).sort(
 		(a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b,
 	);
+}
+
+/** El número de un escalón del podio, en blanco con borde, para pegarlo delante de la columna. */
+function placeTexture(place: number): CanvasTexture {
+	const size = 128;
+	const canvas = document.createElement("canvas");
+	canvas.width = size;
+	canvas.height = size;
+	const context = canvas.getContext("2d");
+	if (context) {
+		const text = String(place);
+		context.font = `900 ${size * 0.78}px system-ui, sans-serif`;
+		context.textAlign = "center";
+		context.textBaseline = "middle";
+		context.lineJoin = "round";
+		context.lineWidth = size * 0.12;
+		context.strokeStyle = "rgba(40, 22, 8, 0.45)";
+		context.strokeText(text, size / 2, size * 0.54);
+		context.fillStyle = "#ffffff";
+		context.fillText(text, size / 2, size * 0.54);
+	}
+	const texture = new CanvasTexture(canvas);
+	texture.colorSpace = SRGBColorSpace;
+	return texture;
 }
 
 /** Crecer pasándose un poco, como un muelle. */

@@ -200,6 +200,9 @@ export class GameRoom implements DurableObject {
 			game: room.game,
 			view,
 			updatedAt: room.updatedAt,
+			// Se pone al mandar, no al guardar: es lo que usan los móviles para
+			// poner su reloj en hora con el de la sala.
+			now: Date.now(),
 		};
 	}
 }

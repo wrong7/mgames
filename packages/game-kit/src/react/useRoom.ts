@@ -21,6 +21,8 @@ export interface Room {
 	dispatch: (action: RoomAction) => void;
 	/** Una jugada del juego en marcha. */
 	play: (action: unknown) => void;
+	/** La hora del servidor según este móvil, en epoch ms. Ver `clockOffset`. */
+	now: () => number;
 }
 
 export interface UseRoomOptions {
@@ -40,6 +42,22 @@ export interface UseRoomOptions {
 /** Reintento con espera creciente, para no martillear un servidor caído. */
 const RETRY_MS = [1000, 2000, 5000, 10000] as const;
 
+/** Cuántas medidas del reloj del servidor se recuerdan. */
+const CLOCK_SAMPLES = 8;
+
+/**
+ * Cuánto hay que sumar a `Date.now()` para tener la hora del servidor.
+ *
+ * Cada vista trae la hora a la que salió del servidor, y llega un poco
+ * después: cada medida se queda corta por lo que tardó en viajar. La mayor de
+ * las últimas es la del mensaje que menos tardó, que es la más cercana a la
+ * verdad; quedarse sólo con las últimas deja que el reloj del móvil se corrija
+ * a mitad de partida sin que una medida vieja lo impida para siempre.
+ */
+function clockOffset(samples: readonly number[]): number {
+	return samples.length > 0 ? Math.max(...samples) : 0;
+}
+
 /**
  * Conecta esta pantalla con una sala.
  *
@@ -58,6 +76,7 @@ export function useRoom({ code, profile, realtimeUrl, engines }: UseRoomOptions)
 	profileRef.current = profile;
 	const enginesRef = useRef(engines);
 	enginesRef.current = engines;
+	const clockRef = useRef<number[]>([]);
 
 	useEffect(() => {
 		setRoom(null);
@@ -83,8 +102,15 @@ export function useRoom({ code, profile, realtimeUrl, engines }: UseRoomOptions)
 
 			socket.addEventListener("message", (event) => {
 				const message = parseServerMessage<RoomView>(String(event.data));
+				if (message?.type !== "state") return;
+				// Un servidor anterior al reloj no manda la hora: se sigue con la del móvil.
+				if (typeof message.state.now === "number") {
+					clockRef.current = [...clockRef.current, message.state.now - Date.now()].slice(
+						-CLOCK_SAMPLES,
+					);
+				}
 				// El servidor es la fuente de verdad: su vista sustituye a la local.
-				if (message?.type === "state") setRoom(message.state);
+				setRoom(message.state);
 			});
 
 			const reconnect = () => {
@@ -145,7 +171,9 @@ export function useRoom({ code, profile, realtimeUrl, engines }: UseRoomOptions)
 		[send],
 	);
 
-	return { room, status, dispatch: send, play };
+	const now = useCallback(() => Date.now() + clockOffset(clockRef.current), []);
+
+	return { room, status, dispatch: send, play, now };
 }
 
 function roomUrl(base: string, code: string, profile: PlayerProfile): string {

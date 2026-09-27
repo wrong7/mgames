@@ -33,6 +33,14 @@ export interface RoomView<GameView = unknown> {
 	/** La vista del juego para quien mira, ya proyectada por su motor. */
 	view: GameView | null;
 	updatedAt: number;
+	/**
+	 * La hora del servidor al mandar esta vista (epoch ms).
+	 *
+	 * Es lo que deja a los juegos con reloj contar con la misma hora en todos los
+	 * móviles: el reloj de cada uno va a su aire, a veces por segundos, y en un
+	 * juego donde algo se ve un segundo eso es la ronda entera.
+	 */
+	now: number;
 }
 
 export type RoomAction =
@@ -85,5 +93,11 @@ export interface GameScreenProps<View, Action> {
 	live: boolean;
 	view: View;
 	play: (action: Action) => void;
+	/**
+	 * La hora de la sala en epoch ms: la del servidor, no la del móvil. Es la
+	 * que usan los motores para decidir si algo llegó a tiempo, así que un juego
+	 * con cuenta atrás tiene que contar con ésta y no con `Date.now()`.
+	 */
+	now: () => number;
 	onExit?: () => void;
 }

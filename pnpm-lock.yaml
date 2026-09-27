@@ -23,6 +23,9 @@ importers:
       '@mgames/codenames':
         specifier: workspace:*
         version: link:../../packages/codenames
+      '@mgames/cubes':
+        specifier: workspace:*
+        version: link:../../packages/cubes
       '@mgames/game-kit':
         specifier: workspace:*
         version: link:../../packages/game-kit
@@ -45,6 +48,9 @@ importers:
       '@mgames/codenames':
         specifier: workspace:*
         version: link:../../packages/codenames
+      '@mgames/cubes':
+        specifier: workspace:*
+        version: link:../../packages/cubes
       '@mgames/game-kit':
         specifier: workspace:*
         version: link:../../packages/game-kit
@@ -105,6 +111,25 @@ importers:
         version: 8.2.2(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0)
 
   packages/codenames:
+    dependencies:
+      '@mgames/game-kit':
+        specifier: workspace:*
+        version: link:../game-kit
+      react:
+        specifier: '>=19'
+        version: 19.2.8
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.2.18
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+
+  packages/cubes:
     dependencies:
       '@mgames/game-kit':
         specifier: workspace:*

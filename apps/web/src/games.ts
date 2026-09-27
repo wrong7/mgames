@@ -1,4 +1,5 @@
 import { CodenamesGame, manifest as codenames, engine as codenamesEngine } from "@mgames/codenames";
+import { CubesScreen, manifest as cubes, engine as cubesEngine } from "@mgames/cubes";
 import type { AnyEngine, GameManifest, GameScreenProps } from "@mgames/game-kit";
 import { SpyScreen, manifest as spy, engine as spyEngine } from "@mgames/spy";
 import type { ComponentType } from "react";
@@ -30,6 +31,11 @@ export const GAMES: readonly GameEntry[] = [
 		manifest: spy,
 		engine: spyEngine as AnyEngine,
 		Screen: SpyScreen as ComponentType<GameScreenProps<unknown, unknown>>,
+	},
+	{
+		manifest: cubes,
+		engine: cubesEngine as AnyEngine,
+		Screen: CubesScreen as ComponentType<GameScreenProps<unknown, unknown>>,
 	},
 ];
 

@@ -10,6 +10,7 @@
 	},
 	"dependencies": {
 		"@mgames/codenames": "workspace:*",
+		"@mgames/cubes": "workspace:*",
 		"@mgames/game-kit": "workspace:*",
 		"@mgames/spy": "workspace:*"
 	},

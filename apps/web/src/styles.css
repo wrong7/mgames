@@ -6,6 +6,7 @@
  * final y el juego se despliega sin estilos.
  */
 @source "../../../packages/codenames/src";
+@source "../../../packages/cubes/src";
 @source "../../../packages/game-kit/src";
 @source "../../../packages/spy/src";
 

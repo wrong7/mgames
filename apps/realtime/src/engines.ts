@@ -1,4 +1,5 @@
 import { engine as codigoSecreto } from "@mgames/codenames/engine";
+import { engine as vistoYNoVisto } from "@mgames/cubes/engine";
 import type { AnyEngine } from "@mgames/game-kit";
 import { engine as espia } from "@mgames/spy/engine";
 
@@ -12,6 +13,7 @@ import { engine as espia } from "@mgames/spy/engine";
 const ENGINES: Record<string, AnyEngine> = {
 	"codigo-secreto": codigoSecreto as AnyEngine,
 	espia: espia as AnyEngine,
+	"visto-y-no-visto": vistoYNoVisto as AnyEngine,
 };
 
 export function findEngine(game: string): AnyEngine | undefined {

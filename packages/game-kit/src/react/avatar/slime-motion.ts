@@ -191,6 +191,8 @@ export class SlimePuppet {
 	#favorite: SlimeGesture;
 	#calm: boolean;
 	#every: readonly [number, number];
+	/** Los gestos pedidos (en gestos de muñeco), traducidos a lo más parecido que sabe hacer. */
+	#gestures: readonly SlimeGesture[] | undefined;
 	#time: number;
 	#gesture: {
 		kind: SlimeGesture;
@@ -242,6 +244,9 @@ export class SlimePuppet {
 		this.#favorite = FAVORITE[favorite];
 		this.#calm = options.calm ?? false;
 		this.#every = options.every ?? [4, 11];
+		this.#gestures = options.gestures?.length
+			? options.gestures.map((gesture) => FAVORITE[gesture])
+			: undefined;
 		this.#time = Math.random() * 100;
 		this.#untilGesture = this.#nextWait();
 		this.#floaterRest = rig.floater?.position.y ?? 0;
@@ -809,6 +814,8 @@ export class SlimePuppet {
 	}
 
 	#pick(): SlimeGesture {
+		const only = this.#gestures;
+		if (only) return only[Math.floor(Math.random() * only.length)] as SlimeGesture;
 		if (Math.random() < 0.4) return this.#favorite;
 		return SLIME_GESTURES[Math.floor(Math.random() * SLIME_GESTURES.length)] as SlimeGesture;
 	}

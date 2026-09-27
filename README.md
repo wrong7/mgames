@@ -15,6 +15,7 @@ apps/web             La web: catálogo de juegos y rutas (TanStack Start)
 apps/realtime        Servidor de salas: un Durable Object por partida (Cloudflare Workers)
 packages/game-kit    Contrato entre juego y app: manifest, motores, códigos, azar determinista, muñecos
 packages/codenames   Código Secreto: motor e interfaz
+packages/cubes       Visto y no visto: motor e interfaz
 packages/spy         El Espía: motor e interfaz
 ```
 
@@ -66,7 +67,10 @@ nada.
   tablero no aparece hasta que todos los de la sala están sentados y listos y
   cada equipo tiene al menos un jefe y un agente — lo comprueba el motor, no la
   pantalla. Después, el asiento manda: destapa el jefe del equipo en turno y
-  señalan sus agentes. El Espía reparte directamente a quien esté.
+  señalan sus agentes. El Espía reparte directamente a quien esté. Visto y no
+  visto va por rondas y cada ronda empieza cuando todos han dicho "listo" (o a
+  los 15 segundos del resultado, para que un despistado no pare la mesa): lo
+  que pasa en él dura poco más de un segundo, y quien no mira se lo pierde.
 
 ## Cómo se sincroniza una partida
 
@@ -75,7 +79,7 @@ dictan en voz alta. Todos los móviles de la sala abren un WebSocket contra él,
 y el objeto difunde la sala —gente, juego elegido y estado del juego— después
 de cada cambio.
 
-Cinco decisiones que conviene conocer antes de tocar nada:
+Seis decisiones que conviene conocer antes de tocar nada:
 
 - **El servidor no sabe a qué se juega.** Lleva la sala (quién está, qué juego
   hay puesto) y busca el motor por slug para pasarle las jugadas
@@ -101,6 +105,16 @@ Cinco decisiones que conviene conocer antes de tocar nada:
   sola. Lo que sí hay es respuesta inmediata en los juegos sin secretos: el
   cliente aplica su jugada antes de que el servidor conteste, porque va a
   confirmar lo mismo.
+- **La hora es la del servidor, y el motor no tiene reloj.** Cada vista sale
+  con la hora del servidor (`RoomView.now`), `useRoom` pone con ella en hora
+  el móvil y las pantallas la reciben como `now()`: el reloj de cada móvil va a
+  su aire, y en Visto y no visto los cubos tienen que esfumarse a la vez en
+  todos. Un juego con reloj guarda en su estado horas, no cuentas atrás
+  (cuándo aparecen los cubos, cuándo se cierra la ronda). Como el servidor sólo
+  ejecuta el motor cuando llega una jugada, cuando a un móvil le parece que ya
+  es la hora manda un aviso (`avanzar`) y el motor lo comprueba con la hora del
+  servidor; si no toca, no pasa nada. Sin nadie mirando, la partida espera en
+  vez de jugarse sola.
 
 ## Los muñecos
 
@@ -160,6 +174,12 @@ o pecas son planos, sin relieve; las gafas y los gorros sí son objetos.
   juegos. three.js y el kit se cargan aparte y sólo cuando hacen falta:
   mientras llegan se ven las peanas (y los muñecos caen sobre ellas al
   llegar), y sin WebGL, o si el kit no baja, se ven retratos planos.
+- **El podio.** Con `variant="podio"`, el mismo escenario cierra una partida:
+  cada uno en la columna de su puesto (`place`), de oro, plata o bronce, que
+  sube del suelo. Caen del último al primero, como en una entrega de medallas,
+  y el que gana no para de celebrarlo mientras los demás le aplauden (a los
+  muñecos se les puede decir qué gestos hacer por su cuenta). Visto y no visto
+  lo usa en su clasificación.
 - **De prueba: slimes.** En el perfil, un interruptor cambia los muñecos por
   slimes en ese móvil (se guarda en el navegador y no viaja: cada uno ve a
   todos con el estilo que tenga puesto). El slime es una gota de gelatina

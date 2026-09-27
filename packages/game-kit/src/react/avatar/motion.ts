@@ -136,6 +136,11 @@ export interface PuppetOptions {
 	calm?: boolean;
 	/** Cada cuánto hace algo por su cuenta, en segundos (mínimo y máximo). */
 	every?: readonly [number, number];
+	/**
+	 * Los gestos que hace por su cuenta y al tocarlo. Sin decir nada, cualquiera,
+	 * con querencia por su favorito; en un podio, el que gana sólo celebra.
+	 */
+	gestures?: readonly Gesture[];
 }
 
 export type Entrance = "cae" | "aparece";
@@ -160,6 +165,7 @@ export class Puppet {
 	#favorite: Gesture;
 	#calm: boolean;
 	#every: readonly [number, number];
+	#gestures: readonly Gesture[] | undefined;
 	#time: number;
 	#gesture: { kind: Gesture; t: number; duration: number; side: 1 | -1 } | null = null;
 	#untilGesture: number;
@@ -186,6 +192,7 @@ export class Puppet {
 		this.#favorite = favorite;
 		this.#calm = options.calm ?? false;
 		this.#every = options.every ?? [4, 11];
+		this.#gestures = options.gestures?.length ? options.gestures : undefined;
 		this.#time = Math.random() * 100;
 		this.#untilGesture = this.#nextWait();
 		this.#floaterRest = rig.floater?.position.y ?? 0;
@@ -725,6 +732,8 @@ export class Puppet {
 	}
 
 	#pick(): Gesture {
+		const only = this.#gestures;
+		if (only) return only[Math.floor(Math.random() * only.length)] as Gesture;
 		if (Math.random() < 0.4) return this.#favorite;
 		return GESTURES[Math.floor(Math.random() * GESTURES.length)] as Gesture;
 	}

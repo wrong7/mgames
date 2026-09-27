@@ -8,7 +8,11 @@ export type { StageActor, StageVariant };
 export interface AvatarStageProps {
 	/** Quién sale, en orden: el primero va delante y en el centro. */
 	actors: readonly StageActor[];
-	/** `sala` pone a todos en formación con su nombre; `solo`, uno grande. */
+	/**
+	 * `sala` pone a todos en formación con su nombre; `solo`, uno grande;
+	 * `podio`, a cada uno en el escalón de su puesto (`place`), para el final de
+	 * una partida.
+	 */
 	variant?: StageVariant;
 	/** Lo que va con cada uno (su nombre): el escenario lo coloca bajo su peana. */
 	renderLabel?: (actor: StageActor) => ReactNode;
