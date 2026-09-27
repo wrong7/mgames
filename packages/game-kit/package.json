@@ -14,13 +14,13 @@
 	"devDependencies": {
 		"@types/node": "^22.10.2",
 		"@types/react": "^19.2.0",
+		"@types/three": "^0.186.0",
 		"typescript": "^6.0.2"
 	},
 	"peerDependencies": {
 		"react": ">=19"
 	},
 	"dependencies": {
-		"@blobatar/react": "^2.7.0",
-		"blobatar": "^2.7.0"
+		"three": "^0.186.0"
 	}
 }

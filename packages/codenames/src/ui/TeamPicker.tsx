@@ -161,7 +161,7 @@ function PlayerChip({ player, ready }: { player: PlayerProfile; ready: boolean }
 			<Avatar seed={player.avatar} size={20} className="block" />
 			{player.name}
 			{ready && (
-				<span className="font-black text-green-300" aria-label="listo">
+				<span className="font-black text-green-300" role="img" aria-label="listo">
 					✓
 				</span>
 			)}

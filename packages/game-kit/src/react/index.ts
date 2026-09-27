@@ -7,6 +7,13 @@
  */
 export { Avatar, type AvatarProps } from "./Avatar.tsx";
 export {
+	AvatarStage,
+	type AvatarStageProps,
+	type StageActor,
+	type StageVariant,
+} from "./AvatarStage.tsx";
+export { type AvatarStyle, setAvatarStyle, useAvatarStyle } from "./avatarStyle.ts";
+export {
 	draftProfile,
 	type ProfileStore,
 	readProfile,

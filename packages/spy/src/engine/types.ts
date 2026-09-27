@@ -55,8 +55,11 @@ export interface SpyView {
 	participants: readonly SpyPlayer[];
 	/** La carta de quien mira. `null` mientras no haya ronda o si no está en ella. */
 	card: Card | null;
-	/** La verdad, sólo cuando la ronda ya se ha destapado. */
-	reveal: { location: string; spyNames: readonly string[] } | null;
+	/**
+	 * La verdad, sólo cuando la ronda ya se ha destapado. Los espías van con su
+	 * cara, no sólo con el nombre: el final se cuenta enseñando quién era.
+	 */
+	reveal: { location: string; spies: readonly SpyPlayer[] } | null;
 	/** El catálogo de localizaciones posibles. Público desde el principio. */
 	locations: readonly string[];
 	updatedAt: number;

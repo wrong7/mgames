@@ -97,9 +97,7 @@ export function project(state: SpyState, actorId: string): SpyView {
 		state.phase === "revelado"
 			? {
 					location: round.location,
-					spyNames: round.spyIds.map(
-						(id) => round.participants.find((p) => p.id === id)?.name ?? "alguien",
-					),
+					spies: round.participants.filter((p) => round.spyIds.includes(p.id)),
 				}
 			: null;
 

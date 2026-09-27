@@ -54,13 +54,55 @@ export function RoleCard({ card }: RoleCardProps) {
 function Hidden() {
 	return (
 		<>
-			<span className="text-5xl" aria-hidden="true">
-				🗂
-			</span>
+			<Folder />
 			<span className="text-xs uppercase tracking-[0.3em] opacity-70">
 				Mantén pulsado para leer
 			</span>
 		</>
+	);
+}
+
+/**
+ * La carpeta del expediente, cerrada y sellada.
+ *
+ * Dibujada y no un emoji: cada móvil pinta los emojis a su manera (en algunos
+ * ni se reconoce la carpeta), y aquí la carpeta es lo único que hay en la carta.
+ */
+function Folder() {
+	const back = "M8 14a6 6 0 0 1 6-6h28l8 8h56a6 6 0 0 1 6 6v58H8z";
+	return (
+		<svg viewBox="0 0 120 92" className="w-32" aria-hidden="true">
+			<path d={back} fill={COLORS.gold} />
+			<path d={back} fill="#000" opacity={0.3} />
+			<rect
+				x="16"
+				y="19"
+				width="88"
+				height="46"
+				rx="2"
+				fill={COLORS.paper}
+				transform="rotate(-3 60 42)"
+			/>
+			<path
+				d="M4 34a6 6 0 0 1 6-6h100a6 6 0 0 1 6 6v46a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6z"
+				fill={COLORS.gold}
+			/>
+			<g transform="rotate(-7 60 58)" fill={COLORS.stamp}>
+				<rect
+					x="26"
+					y="48"
+					width="68"
+					height="21"
+					rx="3"
+					fill="none"
+					stroke={COLORS.stamp}
+					strokeWidth="2.5"
+				/>
+				<text x="60" y="63" textAnchor="middle" fontSize="11.5" fontWeight="900" letterSpacing="2">
+					SECRETO
+				</text>
+			</g>
+		</svg>
 	);
 }
 
@@ -86,11 +128,11 @@ function Revealed({ card }: { card: Card }) {
 	return (
 		<>
 			<span className="text-[0.6rem] uppercase tracking-[0.3em] opacity-60">Estás en</span>
-			<span className="text-3xl font-black uppercase leading-none tracking-tight text-balance">
+			<span className="text-4xl font-black uppercase leading-none tracking-tight text-balance">
 				{card.location}
 			</span>
-			<span className="mt-3 text-[0.6rem] uppercase tracking-[0.3em] opacity-60">Y eres</span>
-			<span className="text-xl font-semibold text-balance">{card.role}</span>
+			<span className="mt-4 text-[0.6rem] uppercase tracking-[0.3em] opacity-60">Y eres</span>
+			<span className="text-2xl font-semibold text-balance">{card.role}</span>
 		</>
 	);
 }

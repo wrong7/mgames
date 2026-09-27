@@ -1,6 +1,6 @@
 import type { PlayerProfile } from "@mgames/game-kit";
 import { randomCode } from "@mgames/game-kit";
-import { useWakeLock } from "@mgames/game-kit/react";
+import { Avatar, useWakeLock } from "@mgames/game-kit/react";
 import { useState } from "react";
 import type { GameAction, GameState, Seat, Team } from "../engine/index.ts";
 import { COLORS } from "../theme.ts";
@@ -98,6 +98,7 @@ export function GameScreen({
 				<WinnerOverlay
 					winner={state.winner}
 					endedBy={state.endedBy}
+					team={players.filter((p) => state.seats[p.id]?.team === state.winner)}
 					isChief={isChief}
 					onRestart={() => play({ type: "restart", seed: randomCode(12) })}
 				/>
@@ -201,11 +202,14 @@ function SeatBadge({ seat, onClick }: { seat: Seat; onClick: () => void }) {
 function WinnerOverlay({
 	winner,
 	endedBy,
+	team,
 	isChief,
 	onRestart,
 }: {
 	winner: Team;
 	endedBy: "cartas" | "asesino" | null;
+	/** Quiénes han ganado, para ponerles cara. */
+	team: readonly PlayerProfile[];
 	isChief: boolean;
 	onRestart: () => void;
 }) {
@@ -220,6 +224,20 @@ function WinnerOverlay({
 			>
 				Gana {winner}
 			</p>
+			{team.length > 0 && (
+				<ul className="mb-2 flex max-w-xs flex-wrap justify-center gap-3">
+					{team.map((player) => (
+						<li key={player.id} className="flex w-16 flex-col items-center gap-1">
+							<span className="rounded-full p-0.5" style={{ backgroundColor: COLORS[winner] }}>
+								<Avatar seed={player.avatar} name={player.name} size={52} className="block" />
+							</span>
+							<span className="max-w-full truncate text-xs font-bold text-white">
+								{player.name}
+							</span>
+						</li>
+					))}
+				</ul>
+			)}
 			{isChief ? (
 				<button
 					type="button"

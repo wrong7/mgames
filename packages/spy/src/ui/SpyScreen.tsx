@@ -1,12 +1,20 @@
 import type { GameScreenProps, PlayerProfile } from "@mgames/game-kit";
 import { randomCode } from "@mgames/game-kit";
-import { useWakeLock } from "@mgames/game-kit/react";
-import { MAX_PLAYERS, MIN_PLAYERS, type SpyAction, type SpyView } from "../engine/index.ts";
+import { Avatar, useWakeLock } from "@mgames/game-kit/react";
+import { useEffect, useState } from "react";
+import {
+	MAX_PLAYERS,
+	MIN_PLAYERS,
+	type SpyAction,
+	type SpyPlayer,
+	type SpyView,
+} from "../engine/index.ts";
 import { manifest } from "../manifest.ts";
 import { COLORS } from "../theme.ts";
 import { LocationList } from "./LocationList.tsx";
 import { PlayerList } from "./PlayerList.tsx";
 import { RoleCard } from "./RoleCard.tsx";
+import { Stamp } from "./Stamp.tsx";
 
 export type SpyScreenProps = GameScreenProps<SpyView, SpyAction>;
 
@@ -103,11 +111,12 @@ function Waiting({
 	const extra = players.length - MAX_PLAYERS;
 
 	return (
-		<div className="flex flex-1 flex-col justify-between gap-4">
-			<div className="flex flex-1 flex-col justify-center gap-4">
+		<div className="flex min-h-0 flex-1 flex-col justify-between gap-4">
+			<div className="flex min-h-0 flex-1 flex-col justify-center gap-6 overflow-y-auto">
 				<h1 className="text-center text-3xl font-black uppercase leading-none tracking-tight">
 					{manifest.name}
 				</h1>
+				<Briefing />
 				<PlayerList players={players} meId={meId} />
 			</div>
 
@@ -128,21 +137,83 @@ function Waiting({
 	);
 }
 
+/**
+ * Las reglas, en tres frases.
+ *
+ * Se leen mientras llega la gente, así que tienen que bastar para que quien no
+ * ha jugado nunca empiece sin que se lo expliquen. Lo que no está aquí (acusar,
+ * votar) se hace hablando: la pantalla sólo reparte y destapa.
+ */
+const BRIEFING = [
+	"Mira tu carta sin que nadie la vea: dice dónde estáis y quién eres. Al espía sólo le dice que es el espía.",
+	"Por turnos, pregunta a quien quieras sobre el sitio. Contesta para que los tuyos te crean, sin regalarle el sitio al espía.",
+	"Cuando sospechéis de alguien, acusadlo en voz alta y destapad. Si el espía adivina dónde estáis, gana él.",
+];
+
+/** La hoja de instrucciones de la misión, con su sello. */
+function Briefing() {
+	return (
+		<section
+			className="relative mx-1 rotate-[-0.6deg] rounded-md px-5 pt-6 pb-5 text-sm leading-snug shadow-xl"
+			style={{ backgroundColor: COLORS.paper, color: COLORS.night }}
+		>
+			<Stamp className="absolute -top-3 right-4 rotate-[5deg] text-[0.65rem]">Alto secreto</Stamp>
+			<h2 className="mb-3 text-[0.6rem] font-bold uppercase tracking-[0.3em] opacity-60">
+				Instrucciones
+			</h2>
+			<ol className="flex flex-col gap-2.5">
+				{BRIEFING.map((step, index) => (
+					<li key={step} className="flex gap-3">
+						<span className="font-mono font-black" style={{ color: COLORS.stamp }}>
+							{index + 1}
+						</span>
+						<span>{step}</span>
+					</li>
+				))}
+			</ol>
+		</section>
+	);
+}
+
 function Playing({ view, meId, onReveal }: { view: SpyView; meId: string; onReveal: () => void }) {
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-3">
 			<RoleCard card={view.card} />
 			<PlayerList players={view.participants} meId={meId} />
-			<LocationList locations={view.locations} />
-			<button
-				type="button"
-				onClick={onReveal}
-				className="shrink-0 rounded-2xl py-3 text-sm font-black uppercase tracking-widest active:scale-[0.98]"
-				style={{ backgroundColor: COLORS.stamp, color: COLORS.paper }}
-			>
-				Destapar
-			</button>
+			{/* Durante la ronda la marca de tiempo es la del reparto: sirve de nombre de la ronda. */}
+			<LocationList locations={view.locations} round={view.updatedAt} />
+			<RevealButton onReveal={onReveal} />
 		</div>
+	);
+}
+
+/**
+ * Destapar acaba la ronda para todos, y el botón está justo debajo de la carta
+ * que se aguanta con el pulgar. Por eso pide una segunda pulsación: un roce no
+ * debería destripar la partida a toda la mesa.
+ */
+function RevealButton({ onReveal }: { onReveal: () => void }) {
+	const [confirming, setConfirming] = useState(false);
+
+	useEffect(() => {
+		if (!confirming) return;
+		const timer = setTimeout(() => setConfirming(false), 3000);
+		return () => clearTimeout(timer);
+	}, [confirming]);
+
+	return (
+		<button
+			type="button"
+			onClick={() => (confirming ? onReveal() : setConfirming(true))}
+			className="shrink-0 rounded-2xl border-2 py-3 text-sm font-black uppercase tracking-widest active:scale-[0.98]"
+			style={{
+				borderColor: COLORS.stamp,
+				backgroundColor: confirming ? COLORS.paper : COLORS.stamp,
+				color: confirming ? COLORS.stamp : COLORS.paper,
+			}}
+		>
+			{confirming ? "¿Destapar para todos?" : "Destapar"}
+		</button>
 	);
 }
 
@@ -153,6 +224,8 @@ function Revealed({
 	reveal: NonNullable<SpyView["reveal"]>;
 	onBack: () => void;
 }) {
+	const many = reveal.spies.length > 1;
+
 	return (
 		<div className="flex flex-1 flex-col justify-between gap-4">
 			<div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
@@ -160,12 +233,14 @@ function Revealed({
 				<p className="text-4xl font-black uppercase leading-none tracking-tight text-balance">
 					{reveal.location}
 				</p>
-				<p className="mt-6 text-xs uppercase tracking-[0.3em] opacity-60">
-					{reveal.spyNames.length > 1 ? "Los espías eran" : "El espía era"}
+				<p className="mt-8 text-xs uppercase tracking-[0.3em] opacity-60">
+					{many ? "Los espías eran" : "El espía era"}
 				</p>
-				<p className="text-3xl font-black" style={{ color: COLORS.stamp }}>
-					{reveal.spyNames.join(" y ")}
-				</p>
+				<ul className="mt-3 flex justify-center gap-5">
+					{reveal.spies.map((spy, index) => (
+						<Mugshot key={spy.id} spy={spy} size={many ? 88 : 120} tilt={index % 2 ? 3 : -3} />
+					))}
+				</ul>
 			</div>
 			<button
 				type="button"
@@ -176,5 +251,23 @@ function Revealed({
 				Otra ronda
 			</button>
 		</div>
+	);
+}
+
+/** La foto de la ficha: su cara sobre papel, con el sello encima. */
+function Mugshot({ spy, size, tilt }: { spy: SpyPlayer; size: number; tilt: number }) {
+	return (
+		<li
+			className="relative flex flex-col items-center gap-2 rounded-md p-2.5 pb-3 shadow-xl"
+			style={{ backgroundColor: COLORS.paper, color: COLORS.night, rotate: `${tilt}deg` }}
+		>
+			<Avatar seed={spy.avatar} name={spy.name} size={size} className="block" />
+			<span className="truncate text-lg font-black" style={{ maxWidth: size }}>
+				{spy.name}
+			</span>
+			<Stamp className="absolute -right-4 bottom-12 rotate-[-14deg] text-base shadow-md">
+				Espía
+			</Stamp>
+		</li>
 	);
 }

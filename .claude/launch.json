@@ -6,6 +6,12 @@
 			"runtimeExecutable": "pnpm",
 			"runtimeArgs": ["--filter", "@mgames/web", "dev"],
 			"port": 3000
+		},
+		{
+			"name": "realtime",
+			"runtimeExecutable": "pnpm",
+			"runtimeArgs": ["--filter", "@mgames/realtime", "dev"],
+			"port": 8787
 		}
 	]
 }

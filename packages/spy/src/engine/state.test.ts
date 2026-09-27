@@ -143,14 +143,16 @@ describe("lo que ve cada jugador", () => {
 		assert.equal(project(createGame("SALA"), "p0").card, null);
 	});
 
-	it("al destapar, todos ven la localización y el nombre del espía", () => {
+	it("al destapar, todos ven la localización y quién era el espía, con su cara", () => {
 		const state = revelada(5);
 		const spyId = state.round?.spyIds[0] as string;
-		const spyName = players(5).find((p) => p.id === spyId)?.name;
+		const spy = players(5).find((p) => p.id === spyId);
 		for (const player of players(5)) {
 			const vista = project(state, player.id);
 			assert.equal(vista.reveal?.location, state.round?.location);
-			assert.deepEqual(vista.reveal?.spyNames, [spyName]);
+			assert.deepEqual(vista.reveal?.spies, [
+				{ id: spy?.id, name: spy?.name, avatar: spy?.avatar },
+			]);
 		}
 	});
 
