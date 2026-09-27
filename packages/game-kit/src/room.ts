@@ -12,6 +12,16 @@ import type { PlayerProfile } from "./profile.ts";
 export interface RoomState {
 	/** Quién está dentro, por orden de llegada. */
 	players: readonly PlayerProfile[];
+	/**
+	 * Todos los que han pasado por la sala, por orden de llegada, menos los que
+	 * se fueron con el botón: quien sale sin él y vuelve recupera su sitio.
+	 */
+	arrivals: readonly string[];
+	/**
+	 * Quién ha dejado la sala y a qué hora sale si no vuelve antes (epoch ms).
+	 * Mientras tanto sigue dentro: una recarga no se nota.
+	 */
+	departures: Readonly<Record<string, number>>;
 	/** Slug del juego en marcha, o `null` si se está eligiendo. */
 	game: string | null;
 	/** Estado del juego en marcha, tal y como lo guarda su motor. */

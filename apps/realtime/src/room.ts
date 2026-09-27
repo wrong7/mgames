@@ -1,5 +1,8 @@
 import {
+	arrive,
+	departDue,
 	hostOf,
+	leave,
 	type PlayerProfile,
 	parseClientMessage,
 	parseProfile,
@@ -9,6 +12,7 @@ import {
 	type RoomView,
 	randomCode,
 	type ServerMessage,
+	scheduleDeparture,
 } from "@mgames/game-kit";
 import { findEngine } from "./engines.ts";
 
@@ -21,9 +25,36 @@ import { findEngine } from "./engines.ts";
  */
 const TTL_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Cuánto se espera a quien cierra la página de la sala antes de sacarlo: lo
+ * que tarda en volver una recarga, que también la cierra.
+ */
+const BYE_GRACE_MS = 10_000;
+
+/**
+ * Cuánto se espera a quien pierde la conexión sin despedirse.
+ *
+ * En el móvil, cerrar la web casi nunca avisa: se quita el navegador de un
+ * manotazo o se bloquea el móvil y se guarda, y lo único que llega es que la
+ * conexión se ha cortado, igual que al perder la cobertura. La sala y los
+ * juegos piden que la pantalla no se apague sola, así que quien lleva un
+ * minuto sin conexión se ha ido; y si no, al volver recupera su sitio.
+ */
+const LOST_GRACE_MS = 60_000;
+
 /** Lo que se guarda de una sala: su gente, su juego y la semilla de la partida. */
 interface Room extends RoomState {
 	seed: string;
+}
+
+/** Una sala tal y como está guardada: las de antes de las salidas no traen ni llegadas ni salidas. */
+type StoredRoom = Omit<Room, "arrivals" | "departures"> &
+	Partial<Pick<Room, "arrivals" | "departures">>;
+
+/** Lo que va pegado a cada conexión: quién hay al otro lado y si se ha despedido. */
+interface Attachment {
+	profile: PlayerProfile;
+	bye: boolean;
 }
 
 /**
@@ -40,6 +71,11 @@ interface Room extends RoomState {
  * perdería cada vez que el grupo deja de mirar el móvil a la vez. La copia es
  * un respaldo, no la fuente de verdad — nunca se lee mientras el objeto esté
  * despierto.
+ *
+ * Entrar es conectarse; salir, darle al botón o dejar la sala (las reglas
+ * están en `presence.ts`, en game-kit). A quien deja la sala se le pone hora
+ * de salida, que se guarda con ella y la cumple la alarma: la misma que la
+ * hace caducar.
  */
 export class GameRoom implements DurableObject {
 	#room: Room | null = null;
@@ -69,17 +105,17 @@ export class GameRoom implements DurableObject {
 		// mensaje. El adjunto del socket sobrevive a eso, así que es donde va quién
 		// hay al otro lado de cada conexión.
 		this.ctx.acceptWebSocket(server);
-		server.serializeAttachment(profile);
+		server.serializeAttachment({ profile, bye: false } satisfies Attachment);
 
-		// Conectarse es entrar: no hay un "unirse" aparte. Quien vuelve tras
-		// bloquear la pantalla ya estaba, y como mucho trae nombre o cara nuevos.
+		// Conectarse es entrar: no hay un "unirse" aparte. Quien vuelve tras una
+		// recarga ya estaba; quien vuelve más tarde, recupera su sitio.
 		const room = await this.#load();
-		const joined = withPlayer(room, profile);
-		if (joined !== room) {
-			await this.#save({ ...joined, updatedAt: Date.now() });
+		const next = arrive(room, profile, Date.now());
+		if (next !== room) await this.#save(next);
+		if (next.players !== room.players) {
 			this.#broadcast();
 		} else {
-			send(server, { type: "state", state: this.#viewFor(room, profile.id) });
+			send(server, { type: "state", state: this.#viewFor(next, profile.id) });
 		}
 
 		return new Response(null, { status: 101, webSocket: client });
@@ -94,9 +130,18 @@ export class GameRoom implements DurableObject {
 			return;
 		}
 
-		const actor = profileOf(ws);
-		if (!actor) {
+		const attachment = attachmentOf(ws);
+		if (!attachment) {
 			send(ws, { type: "error", message: "Conexión sin perfil" });
+			return;
+		}
+		const actor = attachment.profile;
+
+		if (message.type === "bye") {
+			// La página se cierra: esta conexión deja de contar aunque tarde un poco
+			// en cerrarse del todo.
+			ws.serializeAttachment({ ...attachment, bye: true } satisfies Attachment);
+			await this.#departing(actor.id, BYE_GRACE_MS);
 			return;
 		}
 
@@ -124,37 +169,90 @@ export class GameRoom implements DurableObject {
 	}
 
 	async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
-		// 1006 es un cierre sin despedida (se fue la cobertura); devolverlo tal cual
-		// es un error de protocolo, así que se normaliza.
-		//
-		// Desconectarse no saca a nadie de la sala: en un juego presencial el móvil
-		// se bloquea cada dos minutos y el jugador sigue sentado a la mesa. Salir
-		// es una acción explícita.
-		ws.close(code === 1006 ? 1000 : code, reason);
+		await this.#disconnected(ws);
+		// El cierre se devuelve con su código, salvo los que no se pueden mandar:
+		// 1005 (llegó sin código, como el `close()` de la página) y 1006 (se cortó
+		// sin cierre: se fue la cobertura). Devolverlos tal cual lanza.
+		ws.close(code === 1005 || code === 1006 ? 1000 : code, reason);
 	}
 
-	/** Vence el plazo: la sala desaparece entera. */
+	async webSocketError(ws: WebSocket): Promise<void> {
+		await this.#disconnected(ws);
+	}
+
+	/** Vence un plazo: sale quien tenía hora y no ha vuelto, o caduca la sala entera. */
 	async alarm(): Promise<void> {
-		this.#room = null;
-		await this.ctx.storage.deleteAll();
-		for (const socket of this.ctx.getWebSockets()) {
-			socket.close(1000, "La sala ha caducado");
+		const room = await this.#stored();
+		if (!room) return;
+		const now = Date.now();
+
+		if (now >= room.updatedAt + TTL_MS) {
+			this.#room = null;
+			await this.ctx.storage.deleteAll();
+			for (const socket of this.ctx.getWebSockets()) {
+				socket.close(1000, "La sala ha caducado");
+			}
+			return;
 		}
+
+		const next = departDue(room, now, this.#present());
+		if (next === room) {
+			await this.ctx.storage.setAlarm(wakeAt(room));
+			return;
+		}
+		await this.#save(next);
+		if (next.players !== room.players) this.#broadcast();
 	}
 
-	/** La sala en memoria; si el objeto acaba de despertar, la recupera del respaldo. */
-	async #load(): Promise<Room> {
-		if (this.#room) return this.#room;
+	/** Se ha cerrado una conexión: su jugador empieza a irse si no tiene otra. */
+	async #disconnected(ws: WebSocket): Promise<void> {
+		const attachment = attachmentOf(ws);
+		if (!attachment) return;
+		await this.#departing(attachment.profile.id, attachment.bye ? BYE_GRACE_MS : LOST_GRACE_MS);
+	}
 
-		const stored = await this.ctx.storage.get<Room>("room");
-		if (stored) {
-			this.#room = stored;
-			return stored;
+	/** Pone hora de salida a quien ya no tiene la sala abierta en ningún sitio. */
+	async #departing(playerId: string, grace: number): Promise<void> {
+		if (this.#present().has(playerId)) return;
+		const room = await this.#stored();
+		if (!room) return;
+		const next = scheduleDeparture(room, playerId, Date.now() + grace);
+		if (next !== room) await this.#save(next);
+	}
+
+	/**
+	 * Quién tiene la sala abierta ahora mismo: conexiones vivas que no se han
+	 * despedido. La que se está cerrando ya no está abierta.
+	 */
+	#present(): Set<string> {
+		const ids = new Set<string>();
+		for (const socket of this.ctx.getWebSockets()) {
+			if (socket.readyState !== WebSocket.OPEN) continue;
+			const attachment = attachmentOf(socket);
+			if (attachment && !attachment.bye) ids.add(attachment.profile.id);
 		}
+		return ids;
+	}
+
+	/** La sala en memoria o, si el objeto acaba de despertar, la del respaldo. */
+	async #stored(): Promise<Room | null> {
+		if (this.#room) return this.#room;
+		const stored = await this.ctx.storage.get<StoredRoom>("room");
+		if (!stored) return null;
+		this.#room = revive(stored);
+		return this.#room;
+	}
+
+	/** La sala; si no la hay, se abre una. */
+	async #load(): Promise<Room> {
+		const room = await this.#stored();
+		if (room) return room;
 
 		const fresh: Room = {
 			seed: randomCode(16),
 			players: [],
+			arrivals: [],
+			departures: {},
 			game: null,
 			gameState: null,
 			updatedAt: Date.now(),
@@ -166,8 +264,7 @@ export class GameRoom implements DurableObject {
 	async #save(room: Room): Promise<void> {
 		this.#room = room;
 		await this.ctx.storage.put("room", room);
-		// El plazo se cuenta desde el último cambio, no desde que se creó la sala.
-		await this.ctx.storage.setAlarm(Date.now() + TTL_MS);
+		await this.ctx.storage.setAlarm(wakeAt(room));
 	}
 
 	/**
@@ -181,7 +278,7 @@ export class GameRoom implements DurableObject {
 		const room = this.#room;
 		if (!room) return;
 		for (const socket of this.ctx.getWebSockets()) {
-			const actorId = profileOf(socket)?.id ?? "";
+			const actorId = attachmentOf(socket)?.profile.id ?? "";
 			send(socket, { type: "state", state: this.#viewFor(room, actorId) });
 		}
 	}
@@ -215,10 +312,8 @@ function applyRoomAction(room: Room, action: RoomAction, actor: PlayerProfile, n
 	const isHost = hostOf(room.players) === actor.id;
 
 	switch (action.type) {
-		case "leave": {
-			if (!room.players.some((p) => p.id === actor.id)) return room;
-			return { ...room, players: room.players.filter((p) => p.id !== actor.id), updatedAt: now };
-		}
+		case "leave":
+			return leave(room, actor.id, now);
 
 		case "selectGame": {
 			const engine = findEngine(action.game);
@@ -258,17 +353,25 @@ function applyRoomAction(room: Room, action: RoomAction, actor: PlayerProfile, n
 	}
 }
 
-/** La sala con este jugador dentro, al día. La misma sala si ya estaba tal cual. */
-function withPlayer(room: Room, profile: PlayerProfile): Room {
-	const existing = room.players.find((p) => p.id === profile.id);
-	if (!existing) return { ...room, players: [...room.players, profile] };
-	if (existing.name === profile.name && existing.avatar === profile.avatar) return room;
-	return { ...room, players: room.players.map((p) => (p.id === profile.id ? profile : p)) };
+/** Cuándo tiene que despertar la sala: para sacar al próximo que se va o, si no, para caducar. */
+function wakeAt(room: Room): number {
+	return Math.min(room.updatedAt + TTL_MS, ...Object.values(room.departures));
 }
 
-/** Quién hay al otro lado de este socket, según lo adjuntado al aceptarlo. */
-function profileOf(ws: WebSocket): PlayerProfile | null {
-	return parseProfile(ws.deserializeAttachment());
+/** Las salas guardadas antes de las salidas no traen su orden de llegada: es el de su gente. */
+function revive(stored: StoredRoom): Room {
+	return {
+		...stored,
+		arrivals: stored.arrivals ?? stored.players.map((p) => p.id),
+		departures: stored.departures ?? {},
+	};
+}
+
+/** Lo que se pegó a esta conexión al aceptarla, y si se ha despedido desde entonces. */
+function attachmentOf(ws: WebSocket): Attachment | null {
+	const value = ws.deserializeAttachment() as Partial<Attachment> | null;
+	const profile = parseProfile(value?.profile);
+	return profile ? { profile, bye: value?.bye === true } : null;
 }
 
 function send(socket: WebSocket, message: ServerMessage): void {

@@ -9,6 +9,7 @@
 export { CODE_LENGTH, isCompleteCode, normalizeCode, randomCode } from "./code.ts";
 export type { ActorContext, AnyEngine, EngineContext, GameEngine } from "./engine.ts";
 export type { GameManifest } from "./manifest.ts";
+export { arrive, departDue, leave, scheduleDeparture } from "./presence.ts";
 export {
 	MAX_NAME_LENGTH,
 	normalizeName,

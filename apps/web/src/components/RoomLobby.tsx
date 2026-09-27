@@ -1,5 +1,5 @@
 import type { PlayerProfile, RoomView } from "@mgames/game-kit";
-import { AvatarStage, type StageActor } from "@mgames/game-kit/react";
+import { AvatarStage, type StageActor, useWakeLock } from "@mgames/game-kit/react";
 import { useEffect, useMemo, useState } from "react";
 import { gameFacts, headcountIssue } from "../gameFacts.ts";
 import { GAMES } from "../games.ts";
@@ -25,8 +25,13 @@ export interface RoomLobbyProps {
  * elige el anfitrión —el primero que entró— y los demás lo ven como una lista
  * sin botones: es la forma más simple de que no haya cinco dedos cambiando de
  * juego a la vez.
+ *
+ * Como en los juegos, la pantalla no se apaga sola: aquí se espera con el
+ * móvil en la mano, y un móvil que se bloquea acaba perdiendo la conexión y,
+ * al minuto, saliendo de la sala.
  */
 export function RoomLobby({ code, room, profile, live, onSelectGame, onLeave }: RoomLobbyProps) {
+	useWakeLock();
 	const isHost = room.host === profile.id;
 	const hostName = room.players.find((p) => p.id === room.host)?.name;
 	const actors = useMemo<StageActor[]>(

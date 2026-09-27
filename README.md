@@ -56,8 +56,9 @@ nada.
   guarda en el móvil y desde ahí viaja con cada conexión y cada jugada: es lo que
   los demás ven en las fichas y en las listas. La ruta `_jugador` es la puerta:
   nada se abre sin él.
-- **Sala.** Un código de cuatro caracteres. Conectarse es entrar; salir es un
-  botón. Mientras se elige juego, la sala es un escenario: cada uno es su slime
+- **Sala.** Un código de cuatro caracteres. Conectarse es entrar, y se sale con
+  el botón o cerrando la web (ver más abajo cómo se nota que alguien se ha
+  ido). Mientras se elige juego, la sala es un escenario: cada uno es su slime
   en una peana, el que llega cae del cielo y el que se va se derrite en un
   charco. El primero que entró es el anfitrión y es quien pone un juego
   sobre la mesa o lo recoge — la forma más simple de que no haya cinco dedos
@@ -79,7 +80,7 @@ dictan en voz alta. Todos los móviles de la sala abren un WebSocket contra él,
 y el objeto difunde la sala —gente, juego elegido y estado del juego— después
 de cada cambio.
 
-Seis decisiones que conviene conocer antes de tocar nada:
+Siete decisiones que conviene conocer antes de tocar nada:
 
 - **El servidor no sabe a qué se juega.** Lleva la sala (quién está, qué juego
   hay puesto) y busca el motor por slug para pasarle las jugadas
@@ -100,6 +101,17 @@ Seis decisiones que conviene conocer antes de tocar nada:
   el WebSocket en cuanto se bloquea la pantalla, y sin él una sala se perdería
   cada vez que el grupo deja de mirar el móvil a la vez. Una alarma borra la sala
   entera 24 horas después de la última jugada.
+- **Cerrar la web es salir, con margen.** La página se despide al cerrarse,
+  recargarse o dejar la pantalla de la sala (el mensaje `bye`), y el servidor
+  saca al jugador a los 10 segundos si no ha vuelto: una recarga vuelve antes y
+  no se nota. En el móvil, cerrar casi nunca avisa (se quita el navegador, se
+  bloquea y se guarda), así que lo único que llega es que la conexión se ha
+  cortado, y entonces se le espera un minuto. Como un corte también puede ser
+  la cobertura, la sala y los juegos piden que la pantalla no se apague sola,
+  y quien sale sin el botón y vuelve recupera su sitio en el orden de llegada,
+  anfitrión incluido; sólo el botón hace perder la vez. Las horas de salida se
+  guardan con la sala y las cumple la misma alarma que la hace caducar. Las
+  reglas están en `packages/game-kit/src/presence.ts`.
 - **Sin servidor no hay sala.** La sala es literalmente el sitio donde están los
   demás, así que no hay modo local: la pantalla dice "sin conexión" y reintenta
   sola. Lo que sí hay es respuesta inmediata en los juegos sin secretos: el

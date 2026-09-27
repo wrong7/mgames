@@ -64,6 +64,10 @@ function clockOffset(samples: readonly number[]): number {
  * A diferencia de los juegos, la sala no existe sin servidor: es literalmente
  * el sitio donde están los demás. Por eso aquí no hay modo local, sólo un
  * estado de "desconectado" que se reintenta.
+ *
+ * Mientras esta pantalla está puesta, se está en la sala. Al quitarla —otra
+ * ruta, cerrar la pestaña, recargar— se despide, y el servidor saca al
+ * jugador si no vuelve en unos segundos.
  */
 export function useRoom({ code, profile, realtimeUrl, engines }: UseRoomOptions): Room {
 	const [room, setRoom] = useState<RoomView | null>(null);
@@ -126,11 +130,28 @@ export function useRoom({ code, profile, realtimeUrl, engines }: UseRoomOptions)
 			socket.addEventListener("error", () => socket.close());
 		};
 
+		// La página se va: se cierra, se recarga o se navega a otra. No hay
+		// tiempo de esperar respuesta, así que se avisa y ya.
+		const bye = () => {
+			const socket = socketRef.current;
+			if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "bye" }));
+		};
+		// Vuelve del historial con la página tal cual estaba: esa conexión ya se
+		// despidió, así que se abre otra, que es volver a entrar.
+		const restored = (event: PageTransitionEvent) => {
+			if (event.persisted) socketRef.current?.close();
+		};
+		window.addEventListener("pagehide", bye);
+		window.addEventListener("pageshow", restored);
+
 		connect();
 
 		return () => {
 			cancelled = true;
+			window.removeEventListener("pagehide", bye);
+			window.removeEventListener("pageshow", restored);
 			clearTimeout(retryTimer);
+			bye();
 			socketRef.current?.close();
 			socketRef.current = null;
 		};

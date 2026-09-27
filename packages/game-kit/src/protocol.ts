@@ -13,7 +13,13 @@ export type ClientMessage =
 	/** Primer mensaje al conectar: "dame el estado". */
 	| { type: "hello" }
 	/** Una jugada. El servidor la valida antes de aplicarla. */
-	| { type: "action"; action: unknown };
+	| { type: "action"; action: unknown }
+	/**
+	 * "Me voy": la página de la sala se cierra, se recarga o se va a otra. No
+	 * es el botón de salir: si vuelve enseguida, como tras una recarga, sigue
+	 * donde estaba.
+	 */
+	| { type: "bye" };
 
 export type ServerMessage<State = unknown> =
 	/** Estado completo de la sala. Sustituye lo que tenga el cliente. */
@@ -29,7 +35,7 @@ export function parseServerMessage<State>(raw: string): ServerMessage<State> | n
 
 export function parseClientMessage(raw: string): ClientMessage | null {
 	const value = parseJson(raw) as ClientMessage | null;
-	if (value?.type === "hello" || value?.type === "action") return value;
+	if (value?.type === "hello" || value?.type === "action" || value?.type === "bye") return value;
 	return null;
 }
 
