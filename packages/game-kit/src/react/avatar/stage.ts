@@ -19,7 +19,7 @@ import {
 	type WebGLRenderer,
 } from "three";
 import { type Kit, loadedKit, loadKit } from "./kit.ts";
-import { avatarLook } from "./look.ts";
+import { avatarLook, type SlimeGesture } from "./look.ts";
 import type { Entrance, PuppetOptions } from "./motion.ts";
 import {
 	aimKey,
@@ -79,14 +79,29 @@ export interface StageOptions {
 	label: (id: string) => HTMLElement | undefined;
 	/** No han llegado las piezas de los slimes: quien llama pinta la versión plana. */
 	onFail?: () => void;
+	/** Lo que tapa la interfaz al empezar (ver `setInset`). */
+	inset?: StageInset;
+}
+
+/**
+ * Lo que tapan por arriba y por abajo los botones que van encima del
+ * escenario, en píxeles CSS: la cámara encuadra a todos en lo que queda.
+ */
+export interface StageInset {
+	top: number;
+	bottom: number;
 }
 
 export interface Stage {
 	setActors(actors: readonly StageActor[]): void;
 	/** Tamaño del lienzo en píxeles CSS. */
 	setSize(width: number, height: number): void;
-	/** Un toque en el lienzo: el slime tocado hace un gesto. Devuelve quién era. */
+	/** Cambia lo que tapa la interfaz: la cámara se recoloca. */
+	setInset(inset: StageInset): void;
+	/** Un toque en el lienzo: el slime tocado se menea. Devuelve quién era. */
 	tap(x: number, y: number): string | null;
+	/** El slime de ese jugador hace ese gesto; sin decir cuál, uno cualquiera. */
+	emote(id: string, emote?: SlimeGesture): void;
 	dispose(): void;
 }
 
@@ -140,7 +155,8 @@ interface Actor {
 	update(dt: number): void;
 	enter(kind: Entrance, delay?: number): void;
 	leave(): void;
-	play(): void;
+	play(kind?: SlimeGesture): void;
+	poke(): void;
 	hop(): void;
 }
 
@@ -190,6 +206,7 @@ class AvatarStage implements Stage {
 	#scene = new Scene();
 	#camera = new PerspectiveCamera(26, 1, 0.1, 100);
 	#view = { width: 1, height: 1 };
+	#inset: StageInset;
 	#cameraGoal = { position: new Vector3(0, 2.2, 12), target: new Vector3(0, 1, 0) };
 	#cameraLook = new Vector3(0, 1, 0);
 	#slots = new Map<string, Slot>();
@@ -266,6 +283,7 @@ class AvatarStage implements Stage {
 	constructor(renderer: WebGLRenderer, options: StageOptions) {
 		this.#renderer = renderer;
 		this.#options = options;
+		this.#inset = options.inset ?? { top: 0, bottom: 0 };
 		this.#tall = options.variant === "solo" ? 1.35 : 1.2;
 		this.#footprint = 0.8;
 		this.#turn = { solo: 0.12, toCenter: 0.04 };
@@ -357,6 +375,12 @@ class AvatarStage implements Stage {
 		this.#layout([]);
 	}
 
+	setInset(inset: StageInset): void {
+		if (inset.top === this.#inset.top && inset.bottom === this.#inset.bottom) return;
+		this.#inset = inset;
+		this.#layout([]);
+	}
+
 	tap(x: number, y: number): string | null {
 		const pointer = new Vector2((x / this.#view.width) * 2 - 1, -(y / this.#view.height) * 2 + 1);
 		this.#raycaster.setFromCamera(pointer, this.#camera);
@@ -367,8 +391,13 @@ class AvatarStage implements Stage {
 		if (!hit) return null;
 		const slot = [...this.#slots.values()].find((candidate) => candidate.hit === hit.object);
 		if (!slot) return null;
-		slot.puppet?.play();
+		slot.puppet?.poke();
 		return slot.id;
+	}
+
+	emote(id: string, emote?: SlimeGesture): void {
+		const slot = this.#slots.get(id);
+		if (slot && !slot.removing) slot.puppet?.play(emote);
 	}
 
 	dispose(): void {
@@ -546,7 +575,8 @@ class AvatarStage implements Stage {
 					: PODIUM_MOOD.rest;
 		const motion: PuppetOptions = {
 			calm: this.#options.calm,
-			every: mood?.every ?? (solo ? [2.5, 6] : [4, 11]),
+			// En la sala los gestos los manda cada jugador: por su cuenta, ninguno.
+			every: mood?.every ?? (solo ? [2.5, 6] : null),
 			gestures: mood?.gestures,
 		};
 		return new SlimePuppet(buildSlime(look, kit, build), look.tempo, look.favorite, motion);
@@ -696,7 +726,9 @@ class AvatarStage implements Stage {
 	 * compensa cuando sin ella saldrían diminutos.
 	 */
 	#perRow(count: number): number {
-		const { width, height } = this.#view;
+		// Cuenta el alto que dejan libre los botones de encima, que es donde caben.
+		const { width } = this.#view;
+		const height = Math.max(1, this.#view.height - this.#inset.top - this.#inset.bottom);
 		let best = { perRow: count, score: 0 };
 		for (let perRow = Math.min(count, 7); perRow >= 2; perRow--) {
 			const rows = Math.ceil(count / perRow);
@@ -753,11 +785,12 @@ class AvatarStage implements Stage {
 			: podium
 				? { top: 30, bottom: 52, side: 12 }
 				: { top: tiers ? 34 : 10, bottom: 34, side: 12 };
+		// Y encima, lo que tapan los botones que van sobre el escenario.
 		const safe = {
 			left: -1 + (2 * margin.side) / width,
 			right: 1 - (2 * margin.side) / width,
-			bottom: -1 + (2 * margin.bottom) / height,
-			top: 1 - (2 * margin.top) / height,
+			bottom: -1 + (2 * (margin.bottom + this.#inset.bottom)) / height,
+			top: 1 - (2 * (margin.top + this.#inset.top)) / height,
 		};
 
 		const pitch = solo ? 0.1 : tiers ? 0.3 : 0.2;

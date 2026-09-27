@@ -10,6 +10,7 @@ export {
 	AvatarStage,
 	type AvatarStageProps,
 	type StageActor,
+	type StageInset,
 	type StageVariant,
 } from "./AvatarStage.tsx";
 export {
@@ -20,5 +21,11 @@ export {
 	saveProfile,
 	useProfile,
 } from "./profile.ts";
-export { type Room, type RoomStatus, type UseRoomOptions, useRoom } from "./useRoom.ts";
+export {
+	type EmoteListener,
+	type Room,
+	type RoomStatus,
+	type UseRoomOptions,
+	useRoom,
+} from "./useRoom.ts";
 export { useWakeLock } from "./useWakeLock.ts";

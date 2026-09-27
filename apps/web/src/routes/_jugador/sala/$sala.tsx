@@ -27,7 +27,7 @@ function Sala() {
 	const code = normalizeCode(sala);
 	const profile = useCurrentProfile();
 	const navigate = useNavigate();
-	const { room, status, dispatch, play, now } = useRoom({
+	const { room, status, dispatch, play, now, emote, onEmote } = useRoom({
 		code,
 		profile,
 		realtimeUrl: REALTIME_URL,
@@ -67,6 +67,8 @@ function Sala() {
 					live={live}
 					onSelectGame={(slug) => dispatch({ type: "selectGame", game: slug })}
 					onLeave={leave}
+					emote={emote}
+					onEmote={onEmote}
 				/>
 			)}
 			<OfflineNotice live={live} />

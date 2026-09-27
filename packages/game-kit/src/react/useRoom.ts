@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Emote } from "../emote.ts";
 import type { AnyEngine } from "../engine.ts";
 import type { PlayerProfile } from "../profile.ts";
 import { parseServerMessage } from "../protocol.ts";
@@ -23,7 +24,17 @@ export interface Room {
 	play: (action: unknown) => void;
 	/** La hora del servidor según este móvil, en epoch ms. Ver `clockOffset`. */
 	now: () => number;
+	/**
+	 * Un gesto del slime de este jugador. Se ve aquí al momento, sin esperar al
+	 * servidor, y en las demás pantallas en cuanto les llega.
+	 */
+	emote: (emote: Emote) => void;
+	/** Avisa de cada gesto, propio o ajeno, mientras no se deje de escuchar. */
+	onEmote: (listener: EmoteListener) => () => void;
 }
+
+/** Quién ha hecho un gesto (su id de jugador) y cuál. */
+export type EmoteListener = (playerId: string, emote: Emote) => void;
 
 export interface UseRoomOptions {
 	/** Código de la sala: lo que los jugadores se dictan en voz alta. */
@@ -44,6 +55,12 @@ const RETRY_MS = [1000, 2000, 5000, 10000] as const;
 
 /** Cuántas medidas del reloj del servidor se recuerdan. */
 const CLOCK_SAMPLES = 8;
+
+/**
+ * Entre dos gestos, como poco. Algo más que en el servidor, que descarta los
+ * que llegan demasiado juntos: así no se ve aquí uno que los demás no verían.
+ */
+const EMOTE_GAP_MS = 700;
 
 /**
  * Cuánto hay que sumar a `Date.now()` para tener la hora del servidor.
@@ -81,6 +98,8 @@ export function useRoom({ code, profile, realtimeUrl, engines }: UseRoomOptions)
 	const enginesRef = useRef(engines);
 	enginesRef.current = engines;
 	const clockRef = useRef<number[]>([]);
+	const emoteListeners = useRef(new Set<EmoteListener>());
+	const lastEmote = useRef(0);
 
 	useEffect(() => {
 		setRoom(null);
@@ -106,6 +125,12 @@ export function useRoom({ code, profile, realtimeUrl, engines }: UseRoomOptions)
 
 			socket.addEventListener("message", (event) => {
 				const message = parseServerMessage<RoomView>(String(event.data));
+				if (message?.type === "emote") {
+					// Los propios ya se hicieron al mandarlos.
+					if (message.playerId === profileRef.current.id) return;
+					for (const listener of emoteListeners.current) listener(message.playerId, message.emote);
+					return;
+				}
 				if (message?.type !== "state") return;
 				// Un servidor anterior al reloj no manda la hora: se sigue con la del móvil.
 				if (typeof message.state.now === "number") {
@@ -194,7 +219,25 @@ export function useRoom({ code, profile, realtimeUrl, engines }: UseRoomOptions)
 
 	const now = useCallback(() => Date.now() + clockOffset(clockRef.current), []);
 
-	return { room, status, dispatch: send, play, now };
+	const emote = useCallback((gesture: Emote) => {
+		const at = Date.now();
+		if (at - lastEmote.current < EMOTE_GAP_MS) return;
+		lastEmote.current = at;
+		const socket = socketRef.current;
+		if (socket?.readyState === WebSocket.OPEN) {
+			socket.send(JSON.stringify({ type: "emote", emote: gesture }));
+		}
+		for (const listener of emoteListeners.current) listener(profileRef.current.id, gesture);
+	}, []);
+
+	const onEmote = useCallback((listener: EmoteListener) => {
+		emoteListeners.current.add(listener);
+		return () => {
+			emoteListeners.current.delete(listener);
+		};
+	}, []);
+
+	return { room, status, dispatch: send, play, now, emote, onEmote };
 }
 
 function roomUrl(base: string, code: string, profile: PlayerProfile): string {

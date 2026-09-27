@@ -1,6 +1,7 @@
 import {
 	arrive,
 	departDue,
+	type Emote,
 	hostOf,
 	leave,
 	type PlayerProfile,
@@ -42,6 +43,12 @@ const BYE_GRACE_MS = 10_000;
  */
 const LOST_GRACE_MS = 60_000;
 
+/**
+ * Entre dos gestos del mismo jugador, como poco. Un gesto dura más de un
+ * segundo; más seguidos sólo se pisarían, y así nadie inunda la sala a toques.
+ */
+const EMOTE_GAP_MS = 500;
+
 /** Lo que se guarda de una sala: su gente, su juego y la semilla de la partida. */
 interface Room extends RoomState {
 	seed: string;
@@ -79,6 +86,8 @@ interface Attachment {
  */
 export class GameRoom implements DurableObject {
 	#room: Room | null = null;
+	/** Cuándo hizo cada uno su último gesto. En memoria: si el objeto se duerme, da igual. */
+	#lastEmote = new Map<string, number>();
 
 	constructor(private readonly ctx: DurableObjectState) {}
 
@@ -145,6 +154,11 @@ export class GameRoom implements DurableObject {
 			return;
 		}
 
+		if (message.type === "emote") {
+			this.#relayEmote(ws, actor.id, message.emote);
+			return;
+		}
+
 		const room = await this.#load();
 
 		if (message.type === "hello") {
@@ -202,6 +216,20 @@ export class GameRoom implements DurableObject {
 		}
 		await this.#save(next);
 		if (next.players !== room.players) this.#broadcast();
+	}
+
+	/**
+	 * Un gesto: se reenvía a las demás conexiones tal cual, sin tocar la sala
+	 * (no es estado: quien llega después no lo ve). Quien lo hace ya lo ha visto
+	 * en su pantalla.
+	 */
+	#relayEmote(from: WebSocket, playerId: string, emote: Emote): void {
+		const now = Date.now();
+		if (now - (this.#lastEmote.get(playerId) ?? 0) < EMOTE_GAP_MS) return;
+		this.#lastEmote.set(playerId, now);
+		for (const socket of this.ctx.getWebSockets()) {
+			if (socket !== from) send(socket, { type: "emote", playerId, emote });
+		}
 	}
 
 	/** Se ha cerrado una conexión: su jugador empieza a irse si no tiene otra. */

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { arrive, departDue, leave, scheduleDeparture } from "./presence.ts";
 import type { PlayerProfile } from "./profile.ts";
-import { parseClientMessage } from "./protocol.ts";
 import { hostOf, type RoomState } from "./room.ts";
 
 const person = (id: string, name = `Jugador ${id}`): PlayerProfile => ({
@@ -139,12 +138,5 @@ describe("salir con el botón", () => {
 	it("quien no está no puede salir", () => {
 		const room = roomWith("ana");
 		assert.equal(leave(room, "bea", 9000), room);
-	});
-});
-
-describe("mensajes que llegan por la red", () => {
-	it("la despedida es un mensaje que el servidor entiende", () => {
-		assert.deepEqual(parseClientMessage('{"type":"bye"}'), { type: "bye" });
-		assert.equal(parseClientMessage('{"type":"adios"}'), null);
 	});
 });

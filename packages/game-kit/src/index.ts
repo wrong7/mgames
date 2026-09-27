@@ -7,6 +7,7 @@
  * para que el servidor de salas pueda importarlo tal cual.
  */
 export { CODE_LENGTH, isCompleteCode, normalizeCode, randomCode } from "./code.ts";
+export { EMOTES, type Emote, parseEmote } from "./emote.ts";
 export type { ActorContext, AnyEngine, EngineContext, GameEngine } from "./engine.ts";
 export type { GameManifest } from "./manifest.ts";
 export { arrive, departDue, leave, scheduleDeparture } from "./presence.ts";

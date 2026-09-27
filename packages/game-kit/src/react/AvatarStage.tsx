@@ -1,8 +1,9 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar.tsx";
-import type { Stage, StageActor, StageVariant } from "./avatar/stage.ts";
+import type { Stage, StageActor, StageInset, StageVariant } from "./avatar/stage.ts";
+import type { EmoteListener } from "./useRoom.ts";
 
-export type { StageActor, StageVariant };
+export type { StageActor, StageInset, StageVariant };
 
 export interface AvatarStageProps {
 	/** Quién sale, en orden: el primero va delante y en el centro. */
@@ -15,8 +16,18 @@ export interface AvatarStageProps {
 	variant?: StageVariant;
 	/** Lo que va con cada uno (su nombre): el escenario lo coloca bajo su peana. */
 	renderLabel?: (actor: StageActor) => ReactNode;
-	/** Alguien ha tocado un slime, que ya está haciendo su gesto. */
+	/**
+	 * Alguien ha tocado un slime, que se menea. Sin esto, además hace un gesto,
+	 * sólo en esta pantalla; con esto, lo que pase lo decide quien llama.
+	 */
 	onTap?: (id: string) => void;
+	/**
+	 * De dónde llegan los gestos de cada uno (`useRoom().onEmote`): el escenario
+	 * se los hace hacer a su slime.
+	 */
+	emotes?: (listener: EmoteListener) => () => void;
+	/** Lo que tapan los botones que van encima, en píxeles: se encuadra en lo que queda. */
+	inset?: StageInset;
 	className?: string;
 }
 
@@ -32,6 +43,8 @@ export function AvatarStage({
 	variant = "sala",
 	renderLabel,
 	onTap,
+	emotes,
+	inset,
 	className,
 }: AvatarStageProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -41,6 +54,8 @@ export function AvatarStage({
 	// La escena se crea después de montar; así sabe a quién poner cuando llega.
 	const actorsRef = useRef(actors);
 	actorsRef.current = actors;
+	const insetRef = useRef(inset);
+	insetRef.current = inset;
 	const [flat, setFlat] = useState(false);
 
 	useEffect(() => {
@@ -61,6 +76,7 @@ export function AvatarStage({
 					onFail: () => {
 						if (!cancelled) setFlat(true);
 					},
+					inset: insetRef.current,
 				});
 				if (!stage) {
 					setFlat(true);
@@ -90,6 +106,14 @@ export function AvatarStage({
 		stageRef.current?.setActors(actors);
 	}, [actors]);
 
+	const insetTop = inset?.top ?? 0;
+	const insetBottom = inset?.bottom ?? 0;
+	useEffect(() => {
+		stageRef.current?.setInset({ top: insetTop, bottom: insetBottom });
+	}, [insetTop, insetBottom]);
+
+	useEffect(() => emotes?.((id, emote) => stageRef.current?.emote(id, emote)), [emotes]);
+
 	if (flat) {
 		return (
 			<div className={className}>
@@ -111,9 +135,12 @@ export function AvatarStage({
 				ref={containerRef}
 				className="relative h-full w-full touch-manipulation"
 				onPointerDown={(event) => {
+					const stage = stageRef.current;
 					const rect = event.currentTarget.getBoundingClientRect();
-					const id = stageRef.current?.tap(event.clientX - rect.left, event.clientY - rect.top);
-					if (id) onTap?.(id);
+					const id = stage?.tap(event.clientX - rect.left, event.clientY - rect.top);
+					if (!id) return;
+					if (onTap) onTap(id);
+					else stage?.emote(id);
 				}}
 			>
 				{/* Un lienzo nuevo por escenario: el anterior suelta su contexto al irse y ya no vale. */}

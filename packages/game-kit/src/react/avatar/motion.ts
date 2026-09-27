@@ -14,8 +14,12 @@ import type { SlimeGesture } from "./look.ts";
 export interface PuppetOptions {
 	/** `prefers-reduced-motion`: se queda casi quieto y no hace gestos solo. */
 	calm?: boolean;
-	/** Cada cuánto hace algo por su cuenta, en segundos (mínimo y máximo). */
-	every?: readonly [number, number];
+	/**
+	 * Cada cuánto hace algo por su cuenta, en segundos (mínimo y máximo). Con
+	 * `null`, nunca: sólo cuando se le pide. En la sala es así, porque allí cada
+	 * gesto lo manda su jugador y tiene que querer decir algo.
+	 */
+	every?: readonly [number, number] | null;
 	/**
 	 * Los gestos que hace por su cuenta y al tocarlo. Sin decir nada, cualquiera,
 	 * con querencia por su favorito; en un podio, el que gana sólo celebra.

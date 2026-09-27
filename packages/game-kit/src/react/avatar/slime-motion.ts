@@ -159,7 +159,7 @@ export class SlimePuppet {
 	#tempo: number;
 	#favorite: SlimeGesture;
 	#calm: boolean;
-	#every: readonly [number, number];
+	#every: readonly [number, number] | null;
 	/** Los únicos que hace, si se le han pedido (en un podio, el que gana sólo celebra). */
 	#gestures: readonly SlimeGesture[] | undefined;
 	#time: number;
@@ -212,7 +212,7 @@ export class SlimePuppet {
 		this.#tempo = tempo;
 		this.#favorite = favorite;
 		this.#calm = options.calm ?? false;
-		this.#every = options.every ?? [4, 11];
+		this.#every = options.every === undefined ? [4, 11] : options.every;
 		this.#gestures = options.gestures?.length ? options.gestures : undefined;
 		this.#time = Math.random() * 100;
 		this.#untilGesture = this.#nextWait();
@@ -263,6 +263,12 @@ export class SlimePuppet {
 		if (this.#arm.value < 0.05) this.#armSide = side;
 		this.#kick({ squash: 1.6, oval: 0.55, ripple: 0.012 });
 		this.#untilGesture = this.#nextWait();
+	}
+
+	/** Un toque sin más: se menea, pero no hace ningún gesto. */
+	poke(): void {
+		if (this.#exit || this.#entrance) return;
+		this.#kick({ squash: 1.2, oval: 0.5, ripple: 0.01 });
 	}
 
 	/** Un saltito, para cuando se cambia de sitio en la formación. */
@@ -788,6 +794,7 @@ export class SlimePuppet {
 	}
 
 	#nextWait(): number {
+		if (!this.#every) return Number.POSITIVE_INFINITY;
 		const [min, max] = this.#every;
 		return min + Math.random() * (max - min);
 	}

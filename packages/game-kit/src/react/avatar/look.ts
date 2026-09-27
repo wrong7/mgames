@@ -1,3 +1,4 @@
+import { EMOTES, type Emote } from "../../emote.ts";
 import { createRng, type Rng } from "../../rng.ts";
 
 /**
@@ -139,20 +140,12 @@ export const FACE_EXTRAS = [
 ] as const;
 export type FaceExtra = (typeof FACE_EXTRAS)[number];
 
-/** Lo que hace un slime por su cuenta de vez en cuando, o al tocarlo. */
-export const SLIME_GESTURES = [
-	"saluda",
-	"salto",
-	"aplasta",
-	"flan",
-	"estira",
-	"rebota",
-	"vuelta",
-	"infla",
-	"tiembla",
-	"baila",
-] as const;
-export type SlimeGesture = (typeof SLIME_GESTURES)[number];
+/**
+ * Lo que sabe hacer un slime: por su cuenta, al tocarlo o cuando su jugador
+ * lo manda a la sala. Son los gestos de la sala (`EMOTES`), en su orden.
+ */
+export const SLIME_GESTURES = EMOTES;
+export type SlimeGesture = Emote;
 
 export interface AvatarLook {
 	/** El color de la gelatina: siempre uno de mascota (`MASCOT_SKIN`). */

@@ -58,11 +58,16 @@ nada.
   nada se abre sin él.
 - **Sala.** Un código de cuatro caracteres. Conectarse es entrar, y se sale con
   el botón o cerrando la web (ver más abajo cómo se nota que alguien se ha
-  ido). Mientras se elige juego, la sala es un escenario: cada uno es su slime
-  en una peana, el que llega cae del cielo y el que se va se derrite en un
-  charco. El primero que entró es el anfitrión y es quien pone un juego
+  ido). Mientras se elige juego, toda la pantalla es un escenario: cada uno es
+  su slime en una peana, el que llega cae del cielo y el que se va se derrite en
+  un charco. Los botones flotan encima (el código arriba; abajo, el juego y los
+  gestos) y la cámara encuadra a todos en el hueco que dejan. El primero que
+  entró es el anfitrión y es quien elige el juego en un desplegable, lo pone
   sobre la mesa o lo recoge — la forma más simple de que no haya cinco dedos
-  cambiando de juego a la vez.
+  cambiando de juego a la vez. Los gestos (saludar, bailar, inflarse...) se
+  hacen con su botón o tocando tu slime, y los ven todos en su pantalla: el
+  servidor los reenvía sin guardarlos (mensaje `emote`). Por su cuenta, los
+  slimes de la sala no hacen ninguno, para que cada gesto quiera decir algo.
 - **Juego.** Recibe la gente de la sala y no lleva lista propia. Código Secreto
   empieza formando la mesa: cada uno elige equipo y papel y dice "listo", y el
   tablero no aparece hasta que todos los de la sala están sentados y listos y
@@ -182,8 +187,10 @@ o pecas son planos, sin relieve; las gafas y los gorros sí son objetos.
   saltan gotitas. Sabe saludar con un bracito que le sale del costado, saltar,
   aplastarse como una tortita, temblar como un flan, estirarse para mirar a lo
   lejos, botar, dar vueltas, inflarse como un globo (y salir disparado al
-  desinflarse), tiritar de miedo y bailar. Los gestos salen solos de vez en
-  cuando o al tocarlo, que le da un meneo. Para irse, se derrite en un charco.
+  desinflarse), tiritar de miedo y bailar. En el perfil y en el podio los
+  gestos salen solos de vez en cuando; en la sala, sólo cuando su jugador los
+  manda, y tocar el slime de otro sólo le da un meneo. Para irse, se derrite en
+  un charco.
 - **Luz de estudio, slimes de terciopelo.** `scene.ts` pone una luz principal
   con sombras suaves, un contraluz y un entorno propio (una cúpula morada con
   tres focos). Todo es de terciopelo, como los muñecos flocados: mate, sin
