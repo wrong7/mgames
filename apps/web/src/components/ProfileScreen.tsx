@@ -1,12 +1,5 @@
 import { MAX_NAME_LENGTH, normalizeName, type PlayerProfile } from "@mgames/game-kit";
-import {
-	AvatarStage,
-	type AvatarStyle,
-	draftProfile,
-	rerollAvatar,
-	setAvatarStyle,
-	useAvatarStyle,
-} from "@mgames/game-kit/react";
+import { AvatarStage, draftProfile, rerollAvatar } from "@mgames/game-kit/react";
 import { useMemo, useState } from "react";
 import { StageBackdrop } from "./StageBackdrop.tsx";
 
@@ -21,16 +14,10 @@ export interface ProfileScreenProps {
 /** Cuántas caras atrás se puede volver: suficientes para arrepentirse de pasar una. */
 const MAX_HISTORY = 20;
 
-/** Los estilos de personaje; el slime es de prueba y sólo cambia en este móvil. */
-const STYLES: { value: AvatarStyle; label: string }[] = [
-	{ value: "muñeco", label: "Muñeco" },
-	{ value: "slime", label: "Slime" },
-];
-
 /**
  * Quién eres, una vez para todos los juegos.
  *
- * Nombre y muñeco. El muñeco sale de una semilla al azar y se puede volver a
+ * Nombre y slime. El slime sale de una semilla al azar y se puede volver a
  * tirar hasta que salga uno que te guste —y volver al de antes si te lo has
  * saltado—; el nombre es lo que verán los demás en las fichas y en las listas.
  * Es la pantalla de "escribe tu nombre en el móvil" de los juegos de sobremesa
@@ -41,7 +28,6 @@ export function ProfileScreen({ initial, onSave, onCancel }: ProfileScreenProps)
 	const [previous, setPrevious] = useState<string[]>([]);
 	const ready = normalizeName(profile.name).length > 0;
 	const actors = useMemo(() => [{ id: "yo", seed: profile.avatar }], [profile.avatar]);
-	const style = useAvatarStyle();
 
 	const reroll = () => {
 		setPrevious((seeds) => [...seeds, profile.avatar].slice(-MAX_HISTORY));
@@ -65,25 +51,6 @@ export function ProfileScreen({ initial, onSave, onCancel }: ProfileScreenProps)
 			<div className="relative min-h-60 flex-1">
 				<StageBackdrop />
 				<AvatarStage variant="solo" actors={actors} className="absolute inset-0" />
-				<fieldset
-					className="absolute right-3 flex rounded-full bg-black/30 p-1 text-xs font-bold"
-					style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
-				>
-					<legend className="sr-only">Estilo de personaje</legend>
-					{STYLES.map((option) => (
-						<button
-							key={option.value}
-							type="button"
-							onClick={() => setAvatarStyle(option.value)}
-							aria-pressed={style === option.value}
-							className={`rounded-full px-3 py-1.5 active:scale-95 ${
-								style === option.value ? "bg-white text-black" : "text-white/70"
-							}`}
-						>
-							{option.label}
-						</button>
-					))}
-				</fieldset>
 				<div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-2">
 					{previous.length > 0 && (
 						<button

@@ -18,11 +18,9 @@ import {
 	Vector3,
 	type WebGLRenderer,
 } from "three";
-import type { AvatarStyle } from "../avatarStyle.ts";
 import { type Kit, loadedKit, loadKit } from "./kit.ts";
 import { avatarLook } from "./look.ts";
-import { buildAvatar } from "./model.ts";
-import { type Entrance, Puppet, type PuppetOptions } from "./motion.ts";
+import type { Entrance, PuppetOptions } from "./motion.ts";
 import {
 	aimKey,
 	createRenderer,
@@ -35,27 +33,27 @@ import { buildSlime } from "./slime.ts";
 import { SlimePuppet } from "./slime-motion.ts";
 
 /**
- * El escenario: los muñecos de la sala, cada uno en su peana.
+ * El escenario: los slimes de la sala, cada uno en su peana.
  *
  * Es la pantalla de espera de los juegos de consola —la del grupo que va
  * llegando mientras alguien elige a qué jugar—: cada uno que entra cae del
  * cielo sobre una peana nueva, los demás se recolocan dando un saltito y la
  * cámara se aleja lo justo para que quepan todos.
  *
- * Una sola escena y un solo lienzo para todos: un WebGL por muñeco agotaría
+ * Una sola escena y un solo lienzo para todos: un WebGL por slime agotaría
  * los contextos que da el navegador mucho antes de llenar la sala.
  *
- * Las piezas de los muñecos (el kit de Blender) se descargan aparte. Mientras
- * llegan ya se ven las peanas; los muñecos caen sobre ellas en cuanto están.
+ * Las piezas de los slimes (el kit de Blender) se descargan aparte. Mientras
+ * llegan ya se ven las peanas; los slimes caen sobre ellas en cuanto están.
  *
  * Al acabar una partida hace de podio: las peanas suben sobre columnas de oro,
- * plata y bronce, los muñecos caen del último al primero y el que gana no para
- * de celebrarlo mientras los demás le aplauden.
+ * plata y bronce, los slimes caen del último al primero y el que gana no para
+ * de celebrarlo mientras los demás le saludan.
  */
 
 export interface StageActor {
 	id: string;
-	/** La semilla del muñeco: `profile.avatar`. */
+	/** La semilla del slime: `profile.avatar`. */
 	seed: string;
 	/** Peana con el aro en blanco: para señalar quién mira. */
 	highlight?: boolean;
@@ -79,17 +77,15 @@ export interface StageOptions {
 	calm: boolean;
 	/** El nombre de cada uno, ya en el DOM: el escenario sólo lo coloca. */
 	label: (id: string) => HTMLElement | undefined;
-	/** No han llegado las piezas de los muñecos: quien llama pinta la versión plana. */
+	/** No han llegado las piezas de los slimes: quien llama pinta la versión plana. */
 	onFail?: () => void;
-	/** Muñecos (lo normal) o, de prueba, slimes. */
-	style?: AvatarStyle;
 }
 
 export interface Stage {
 	setActors(actors: readonly StageActor[]): void;
 	/** Tamaño del lienzo en píxeles CSS. */
 	setSize(width: number, height: number): void;
-	/** Un toque en el lienzo: el muñeco tocado hace un gesto. Devuelve quién era. */
+	/** Un toque en el lienzo: el slime tocado hace un gesto. Devuelve quién era. */
 	tap(x: number, y: number): string | null;
 	dispose(): void;
 }
@@ -121,15 +117,16 @@ const MEDALS: Readonly<Record<number, { body: string; top: string; rim: string }
 };
 
 /**
- * Lo que hace cada uno en el podio: el que gana lo celebra a menudo y los
- * demás le aplauden (y alguno se encoge de hombros).
+ * Lo que hace cada uno en el podio: el que gana lo celebra a menudo (bota,
+ * baila, se infla) y los demás le saludan, se estiran para verlo o se chafan
+ * de pena.
  */
 const PODIUM_MOOD = {
-	winner: { gestures: ["celebra", "baile", "salto", "flexiona", "vuelta"], every: [1.2, 2.6] },
-	rest: { gestures: ["aplaude", "aplaude", "saludo", "encoge"], every: [2.2, 4.5] },
+	winner: { gestures: ["rebota", "baila", "salto", "infla", "vuelta"], every: [1.2, 2.6] },
+	rest: { gestures: ["saluda", "saluda", "estira", "aplasta"], every: [2.2, 4.5] },
 } as const;
 
-/** Lo que el escenario necesita de cada uno, sea muñeco o slime. */
+/** Lo que el escenario necesita de cada slime: su malla, cómo se mueve y cómo entra y sale. */
 interface Actor {
 	readonly rig: {
 		readonly root: Object3D;
@@ -161,7 +158,7 @@ interface Slot {
 	group: Group;
 	/** Lo que crece al aparecer y mengua al irse. */
 	pedestal: Group;
-	/** Sobre la peana: donde se planta el muñeco. */
+	/** Sobre la peana: donde se planta el slime. */
 	stand: Group;
 	body: Mesh;
 	top: Mesh;
@@ -175,11 +172,11 @@ interface Slot {
 	ground: Mesh | null;
 	/** En el podio, el puesto: de él salen la altura, el color y lo que hace. */
 	place: number | undefined;
-	/** `null` mientras no llegan las piezas de los muñecos. */
+	/** `null` mientras no llegan las piezas de los slimes. */
 	puppet: Actor | null;
-	/** Hacia dónde mira el muñeco en su sitio. */
+	/** Hacia dónde mira el slime en su sitio. */
 	facing: number;
-	/** Muñecos anteriores terminando de irse (tras cambiar de cara). */
+	/** Slimes anteriores terminando de irse (tras cambiar de cara). */
 	leaving: Actor[];
 	spot: Spot;
 	/** De 0 a 1: cuánto ha crecido la peana. */
@@ -211,12 +208,12 @@ class AvatarStage implements Stage {
 	 * en vez de que la cámara se acerque hasta hacerlos enormes.
 	 */
 	#tall: number;
-	/** La sombra de contacto: la de los pies de un muñeco o la de un slime, más pequeña. */
+	/** La sombra de contacto del slime en su peana. */
 	#footprint: number;
 	/**
-	 * Hacia dónde miran: solo, de tres cuartos; en la sala, un poco hacia el
-	 * centro del grupo. Un slime es casi todo cara, y girado como un muñeco
-	 * parece que mira de lado: se gira mucho menos.
+	 * Hacia dónde miran: solo, un pelín de lado; en la sala, un poco hacia el
+	 * centro del grupo. Poco: un slime es casi todo cara, y girado de más
+	 * parece que mira de lado.
 	 */
 	#turn: { solo: number; toCenter: number };
 
@@ -269,10 +266,9 @@ class AvatarStage implements Stage {
 	constructor(renderer: WebGLRenderer, options: StageOptions) {
 		this.#renderer = renderer;
 		this.#options = options;
-		const slime = options.style === "slime";
-		this.#tall = slime ? (options.variant === "solo" ? 1.35 : 1.2) : 1.9;
-		this.#footprint = slime ? 0.8 : 1.15;
-		this.#turn = slime ? { solo: 0.12, toCenter: 0.04 } : { solo: 0.35, toCenter: 0.07 };
+		this.#tall = options.variant === "solo" ? 1.35 : 1.2;
+		this.#footprint = 0.8;
+		this.#turn = { solo: 0.12, toCenter: 0.04 };
 		renderer.setPixelRatio(this.#quality.pixelRatio);
 		this.#studio = studioLights(this.#scene);
 		this.#scene.environment = studioEnvironment(renderer);
@@ -521,7 +517,7 @@ class AvatarStage implements Stage {
 		let medal = this.#medals.get(place);
 		if (!medal) {
 			medal = {
-				// Mates, como los muñecos: con brillo de metal reflejarían la cúpula
+				// Mates, como los slimes: con brillo de metal reflejarían la cúpula
 				// morada del estudio y la plata saldría lila.
 				body: new MeshStandardMaterial({ color: colors.body, roughness: 0.75, metalness: 0.05 }),
 				top: new MeshStandardMaterial({ color: colors.top, roughness: 0.6, metalness: 0.05 }),
@@ -553,19 +549,16 @@ class AvatarStage implements Stage {
 			every: mood?.every ?? (solo ? [2.5, 6] : [4, 11]),
 			gestures: mood?.gestures,
 		};
-		if (this.#options.style === "slime") {
-			return new SlimePuppet(buildSlime(look, kit, build), look.tempo, look.favorite, motion);
-		}
-		return new Puppet(buildAvatar(look, kit, build), look.tempo, look.favorite, motion);
+		return new SlimePuppet(buildSlime(look, kit, build), look.tempo, look.favorite, motion);
 	}
 
-	/** Planta a un muñeco en su peana, con lo que suelte aparte (las gotitas del slime). */
+	/** Planta a un slime en su peana, con lo que suelte aparte (las gotitas). */
 	#mount(slot: Slot, puppet: Actor): void {
 		slot.stand.add(puppet.rig.root);
 		if (puppet.rig.effects) slot.stand.add(puppet.rig.effects);
 	}
 
-	/** Cambio de cara: el de antes se va dando vueltas y el nuevo aparece en su sitio. */
+	/** Cambio de cara: el de antes se derrite y el nuevo brota en su sitio. */
 	#swapPuppet(slot: Slot, seed: string): void {
 		slot.seed = seed;
 		if (slot.puppet) {
@@ -578,14 +571,13 @@ class AvatarStage implements Stage {
 		}
 		const puppet = this.#makePuppet(this.#kit, seed, slot.place);
 		puppet.facing = slot.facing;
-		// El slime de antes tarda más en irse (se derrite): el nuevo brota del charco.
-		const wait = this.#options.style === "slime" ? 0.45 : 0.12;
-		puppet.enter("aparece", this.#options.calm ? 0 : wait);
+		// El de antes tarda en irse (se derrite): el nuevo brota del charco.
+		puppet.enter("aparece", this.#options.calm ? 0 : 0.45);
 		this.#mount(slot, puppet);
 		slot.puppet = puppet;
 	}
 
-	/** Llegan las piezas: cada peana recibe a su muñeco, que cae del cielo. */
+	/** Llegan las piezas: cada peana recibe a su slime, que cae del cielo. */
 	#arrive(kit: Kit): void {
 		if (this.#disposed) return;
 		this.#kit = kit;
@@ -681,7 +673,9 @@ class AvatarStage implements Stage {
 	 * fuera. Todos en la misma línea, cada uno a la altura de su escalón.
 	 */
 	#podium(count: number): Spot[] {
-		const columns = centerOut(count);
+		// Si son pares no hay columna en medio: el primero va en la de la derecha
+		// de las dos (según se mira), y así el segundo queda a su derecha.
+		const columns = centerOut(count, Math.floor(count / 2));
 		return this.#order.map((id, rank) => {
 			const place = this.#slots.get(id)?.place;
 			const offset = (columns[rank] as number) - (count - 1) / 2;
@@ -707,7 +701,7 @@ class AvatarStage implements Stage {
 		for (let perRow = Math.min(count, 7); perRow >= 2; perRow--) {
 			const rows = Math.ceil(count / perRow);
 			const across = Math.min(count, perRow);
-			// Medidas aproximadas en unidades de muñeco: cada grada suma su
+			// Medidas aproximadas en unidades del escenario: cada grada suma su
 			// subida más lo que asoma por estar un paso más atrás.
 			const size = Math.min(width / (across * SPACING + 0.4), height / (2.4 + (rows - 1) * 1.25));
 			const score = size * 0.8 ** Math.max(0, rows - 2);
@@ -751,7 +745,7 @@ class AvatarStage implements Stage {
 		}
 
 		// Márgenes en píxeles: abajo, sitio para los nombres bajo las peanas;
-		// arriba, para los de las gradas, que van sobre la cabeza. El muñeco
+		// arriba, para los de las gradas, que van sobre la cabeza. El slime
 		// solo necesita aire para saltar y dejar sitio a los botones de debajo;
 		// en el podio, el que gana salta al celebrarlo y los nombres ocupan dos líneas.
 		const margin = solo
@@ -847,7 +841,7 @@ class AvatarStage implements Stage {
 				slot.leaving = slot.leaving.filter((puppet) => !puppet.gone);
 			}
 
-			// La peana crece al llegar y, cuando su muñeco ya se ha ido, mengua.
+			// La peana crece al llegar y, cuando su slime ya se ha ido, mengua.
 			const gone = slot.puppet?.gone ?? true;
 			const goal = slot.removing ? (gone ? 0 : 1) : 1;
 			slot.grown += (goal - slot.grown) * Math.min(1, dt * (goal > slot.grown ? 6 : 9));
@@ -919,9 +913,11 @@ class AvatarStage implements Stage {
 	}
 }
 
-/** Columnas de dentro afuera: el centro primero, luego alternando a los lados. */
-function centerOut(count: number): number[] {
-	const center = (count - 1) / 2;
+/**
+ * Columnas de dentro afuera: la de `center` primero, luego alternando a los
+ * lados, empezando por la izquierda de quien mira.
+ */
+function centerOut(count: number, center = (count - 1) / 2): number[] {
 	return Array.from({ length: count }, (_, i) => i).sort(
 		(a, b) => Math.abs(a - center) - Math.abs(b - center) || a - b,
 	);
@@ -958,7 +954,7 @@ function grow(x: number): number {
 }
 
 /**
- * Calidad adaptativa. Un móvil de gama baja con diez muñecos, sombras y a
+ * Calidad adaptativa. Un móvil de gama baja con diez slimes, sombras y a
  * doble resolución puede no llegar; en vez de adivinarlo por el modelo, se
  * mira cuánto tardan los fotogramas y, si van lentos un par de segundos
  * seguidos, se baja un escalón. Nunca se vuelve a subir: ir y venir se notaría

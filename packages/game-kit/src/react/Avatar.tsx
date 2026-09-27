@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { type AvatarLook, avatarLook, hidesHair, slimeColor } from "./avatar/look.ts";
-import { type AvatarStyle, useAvatarStyle } from "./avatarStyle.ts";
+import { type AvatarLook, avatarLook } from "./avatar/look.ts";
 
 export interface AvatarProps {
 	/** Semilla del avatar: `profile.avatar`. La misma semilla, la misma cara. */
@@ -13,9 +12,9 @@ export interface AvatarProps {
 }
 
 /**
- * La cara de un jugador: un retrato fijo de su muñeco 3D.
+ * La cara de un jugador: un retrato fijo de su slime 3D.
  *
- * El muñeco sale de la semilla, así que no hay imágenes que subir ni guardar:
+ * El slime sale de la semilla, así que no hay imágenes que subir ni guardar:
  * la semilla viaja con el perfil y cada móvil hace la misma foto. Se pinta
  * como `<img>` estático, que es lo que permite poner veinticinco en un tablero
  * sin que pese.
@@ -25,25 +24,23 @@ export interface AvatarProps {
  * sale del servidor.
  */
 export function Avatar({ seed, size, name, className }: AvatarProps) {
-	const style = useAvatarStyle();
 	const look = useMemo(() => avatarLook(seed), [seed]);
-	const key = `${style}:${seed}`;
 	const [photo, setPhoto] = useState(() => {
-		const url = loaded?.cachedPortrait(seed, style);
-		return url ? { key, url } : null;
+		const url = loaded?.cachedPortrait(seed);
+		return url ? { seed, url } : null;
 	});
 
 	useEffect(() => {
 		let cancelled = false;
-		requestPortrait(seed, style).then((url) => {
-			if (!cancelled && url) setPhoto({ key: `${style}:${seed}`, url });
+		requestPortrait(seed).then((url) => {
+			if (!cancelled && url) setPhoto({ seed, url });
 		});
 		return () => {
 			cancelled = true;
 		};
-	}, [seed, style]);
+	}, [seed]);
 
-	const src = photo?.key === key ? photo.url : style === "slime" ? slimeSketch(look) : sketch(look);
+	const src = photo?.seed === seed ? photo.url : sketch(look);
 	return (
 		<img
 			src={src}
@@ -70,8 +67,8 @@ let queue: Promise<unknown> = Promise.resolve();
  * primera vez que se abre un tablero llegan diez de golpe, y hacerlos seguidos
  * se notaría en la mano.
  */
-function requestPortrait(seed: string, style: AvatarStyle): Promise<string | null> {
-	const cached = loaded?.cachedPortrait(seed, style);
+function requestPortrait(seed: string): Promise<string | null> {
+	const cached = loaded?.cachedPortrait(seed);
 	if (cached) return Promise.resolve(cached);
 	loading ??= import("./avatar/portrait.ts").then((module) => {
 		loaded = module;
@@ -80,7 +77,7 @@ function requestPortrait(seed: string, style: AvatarStyle): Promise<string | nul
 	const job = queue.then(async () => {
 		const module = await loading;
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		return module?.portrait(seed, style) ?? null;
+		return module?.portrait(seed) ?? null;
 	});
 	queue = job.catch(() => null);
 	return job.catch(() => null);
@@ -90,7 +87,7 @@ const sketches = new Map<string, string>();
 
 const INK = "#2a1a22";
 
-/** Los ojos del boceto, dibujados como en la cara del muñeco. */
+/** Los ojos del boceto, dibujados como en la cara del slime. */
 function sketchEyes(look: AvatarLook, cy: number): string {
 	if (look.eyes === "felices") {
 		return [27, 37]
@@ -117,46 +114,15 @@ function sketchEyes(look: AvatarLook, cy: number): string {
 }
 
 /**
- * Boceto plano del muñeco: la cabeza, el pelo o el gorro, los hombros y los
- * ojos. Basta para reconocerlo mientras llega el 3D.
+ * Boceto plano del slime: la gota de su color, con sus ojos y un brillo.
+ * Basta para reconocerlo mientras llega el 3D.
  */
 function sketch(look: AvatarLook): string {
-	const key = [
-		look.skin,
-		look.hair,
-		look.hairColor,
-		look.hat,
-		look.hatColor,
-		look.topColor,
-		look.eyes,
-		look.pupil.toFixed(2),
-	].join();
-	const cached = sketches.get(key);
-	if (cached) return cached;
-	const rx = 14.5;
-	const ry = 14.2;
-	const cy = 29;
-	const top = cy - ry;
-	const crown =
-		look.hat && hidesHair(look.hat)
-			? `<path d="M${32 - rx - 1} ${cy - 2}C${32 - rx - 1} ${top + 3} ${32 - rx / 2} ${top - 3} 32 ${top - 3}s${rx + 1} 6 ${rx + 1} ${ry - 1}z" fill="${look.hatColor}"/>`
-			: look.hair === "calvo" || look.hair === "tres-pelos"
-				? ""
-				: `<path d="M${32 - rx + 0.5} ${cy}C${32 - rx} ${top + 4} ${32 - rx / 2} ${top} 32 ${top}s${rx - 0.5} 4 ${rx - 0.5} ${ry}c-3-6-9-8.5-${rx - 0.5}-8.5S${32 - rx + 3.5} ${cy - 6} ${32 - rx + 0.5} ${cy}z" fill="${look.hairColor}"/>`;
-	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M7 66c1-14 11-21 25-21s24 7 25 21z" fill="${look.topColor}"/><ellipse cx="32" cy="${cy}" rx="${rx}" ry="${ry}" fill="${look.skin}"/>${crown}${sketchEyes(look, cy - 0.5)}<path d="M28.5 ${cy + 7.5}q3.5 3 7 0" stroke="${INK}" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>`;
-	const url = `data:image/svg+xml,${encodeURIComponent(svg)}`;
-	sketches.set(key, url);
-	return url;
-}
-
-/** Boceto plano del slime: la gota de su color, con sus ojos y un brillo. */
-function slimeSketch(look: AvatarLook): string {
-	const color = slimeColor(look);
-	const key = ["slime", color, look.eyes, look.pupil.toFixed(2)].join();
+	const key = [look.skin, look.eyes, look.pupil.toFixed(2)].join();
 	const cached = sketches.get(key);
 	if (cached) return cached;
 	const cy = 36;
-	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M5 66C5 42 13 19 32 19s27 23 27 47z" fill="${color}"/><ellipse cx="20" cy="30" rx="3" ry="5.5" fill="#fff" opacity="0.45" transform="rotate(28 20 30)"/>${sketchEyes(look, cy)}<path d="M28.5 ${cy + 8}q3.5 3 7 0" stroke="${INK}" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>`;
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M5 66C5 42 13 19 32 19s27 23 27 47z" fill="${look.skin}"/><ellipse cx="20" cy="30" rx="3" ry="5.5" fill="#fff" opacity="0.45" transform="rotate(28 20 30)"/>${sketchEyes(look, cy)}<path d="M28.5 ${cy + 8}q3.5 3 7 0" stroke="${INK}" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>`;
 	const url = `data:image/svg+xml,${encodeURIComponent(svg)}`;
 	sketches.set(key, url);
 	return url;

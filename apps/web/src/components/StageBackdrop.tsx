@@ -1,8 +1,8 @@
 /**
- * El fondo del escenario de los muñecos: noche morada con estrellas.
+ * El fondo del escenario de los slimes: noche morada con estrellas.
  *
  * Va en CSS y no dentro de la escena 3D para que sea nítido a cualquier
- * resolución y no cueste nada al renderizar: el lienzo de los muñecos es
+ * resolución y no cueste nada al renderizar: el lienzo de los slimes es
  * transparente y se pone encima.
  *
  * Sin estrellas donde el cielo va detrás de párrafos: un punto blanco entre

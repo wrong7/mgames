@@ -1,44 +1,28 @@
 import {
-	Bone,
-	Box3,
 	Color,
-	Euler,
-	Group,
 	type Material,
 	Mesh,
 	MeshStandardMaterial,
 	type Object3D,
-	Quaternion,
-	SkinnedMesh,
 	type Texture,
 	Vector3,
 } from "three";
-import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
-import { type Expression, type EyeSpot, Face, type FacePlan } from "./face.ts";
+import type { EyeSpot, FacePlan } from "./face.ts";
 import type { HeadForm, Kit, Piece } from "./kit.ts";
 import { type AvatarLook, hidesHair } from "./look.ts";
-import {
-	type BodyMaterial,
-	bodyMaterial,
-	fixedMaterial,
-	headMaterial,
-	velvet,
-} from "./materials.ts";
+import { fixedMaterial, velvet } from "./materials.ts";
 
 /**
- * El muñeco en 3D: de un aspecto (`look.ts`) y las piezas del kit de Blender
- * (`kit.ts`) a un grupo de three.js con los huesos a mano para animarlo.
+ * Lo que un slime lleva en la cabeza, a partir de su aspecto (`look.ts`) y de
+ * las piezas del kit de Blender (`kit.ts`): dónde van los ojos, la nariz y la
+ * boca dibujados (`face.ts`), el pelo y el gorro echados hacia atrás lo justo
+ * para no taparlos, las gafas o el monóculo donde caigan los ojos, y los
+ * colores de todo ello. Lo monta `slime.ts`.
  *
- * Todos tienen el mismo cuerpo y la misma cabeza: lo que cambia es lo que
- * llevan puesto y la cara. El cuerpo es el del kit, con su esqueleto y la ropa
- * pintada según la semilla. La cabeza cuelga del hueso "cabeza" con todo lo
- * suyo: la cara dibujada en su textura (`face.ts`), el pelo, el gorro y, si
- * toca, las gafas o el monóculo donde caigan los ojos.
- *
- * Medidas en "metros de muñeco": mide unos dos. Mira hacia +Z.
+ * Las piezas del kit están hechas para la cabeza de referencia (`kit.head`, el
+ * "craneo"): la del slime es esa misma a otra escala. Mira hacia +Z.
  */
 
-const Y_AXIS = new Vector3(0, 1, 0);
 const Z_AXIS = new Vector3(0, 0, 1);
 
 /** Dónde van los ojos y la boca, en cabeceo desde el centro de la cabeza. */
@@ -70,356 +54,9 @@ export interface Pupil {
 	loose: boolean;
 }
 
-/**
- * Un brazo: balanceo adelante (x) y hacia fuera (z) desde colgar recto, y el
- * codo. El codo dobla hacia delante; con el brazo girado sobre sí mismo
- * (`twist`, un cuarto de vuelta) dobla hacia arriba, como al sacar bíceps.
- */
-export interface ArmPose {
-	x: number;
-	z: number;
-	elbow: number;
-	twist: number;
-}
-
-/** Una pierna: adelante (x < 0) o atrás, y rodilla. */
-export interface LegPose {
-	x: number;
-	knee: number;
-}
-
-export interface DollPose {
-	/** El tronco desde la cintura: adelante (x) y de lado (z). */
-	spineX: number;
-	spineZ: number;
-	/** Hombros arriba (encogerse). */
-	shrug: number;
-	breath: number;
-	headX: number;
-	headY: number;
-	headZ: number;
-	/** El flan: la cabeza aplastada (> 0) o estirada. */
-	jelly: number;
-	armL: ArmPose;
-	armR: ArmPose;
-	/** Bíceps de sacar músculo, de 0 a 1. */
-	muscle: number;
-	legL: LegPose;
-	legR: LegPose;
-}
-
-interface BoneRest {
-	quaternion: Quaternion;
-	position: Vector3;
-}
-
-const BONES = [
-	"cadera",
-	"columna",
-	"pecho",
-	"cabeza",
-	"brazo.L",
-	"antebrazo.L",
-	"brazo.R",
-	"antebrazo.R",
-	"muslo.L",
-	"pierna.L",
-	"muslo.R",
-	"pierna.R",
-] as const;
-type BoneName = (typeof BONES)[number];
-
-/** El muñeco montado: su grupo, sus huesos y cómo ponerle una pose o una cara. */
-export class Doll {
-	/** En los pies. Saltos, giros y el aplastado al caer. */
-	readonly root = new Group();
-	/** Altura total, gorro incluido. */
-	readonly height: number;
-	/** Dónde está la cara (desde los pies) y cuánto abulta: para los retratos. */
-	readonly face: { center: Vector3; size: number };
-	/** Las pupilas que se mueven (las de los ojos con blanco). */
-	readonly pupils: Pupil[];
-	/** Entre los ojos: sus meneos son los que sacuden las pupilas sueltas. */
-	readonly eyes: Object3D;
-	/** Lo que gira solo: la hélice del gorro. */
-	readonly spinner: Object3D | null;
-	/** Lo que flota: la aureola. */
-	readonly floater: Object3D | null;
-	/**
-	 * Cuánto se abren los brazos en reposo, desde colgar recto: lo justo para
-	 * que las manos no se metan en la cadera y, con falda, queden por fuera.
-	 */
-	readonly restArm: number;
-
-	#bones: Record<BoneName, Bone>;
-	#rest = new Map<Bone, BoneRest>();
-	/** Cuánto cuelga de lado cada brazo en reposo, para medir la pose desde colgar recto. */
-	#armRest: { L: number; R: number };
-	#elbowAxis: { L: Vector3; R: Vector3 };
-	#kneeAxis: { L: Vector3; R: Vector3 };
-	#paint: Face;
-	#bodies: SkinnedMesh[];
-	#muscle: number | undefined;
-	#owned: (Material | Texture)[] = [];
-	#euler = new Euler();
-	#q = new Quaternion();
-
-	constructor(parts: DollParts) {
-		this.root.add(parts.armature);
-		this.#bones = parts.bones;
-		this.#paint = parts.face;
-		this.#bodies = parts.bodies;
-		this.#muscle = parts.bodies[0]?.morphTargetDictionary?.musculo;
-		this.#owned = parts.owned;
-		this.pupils = Array.from({ length: parts.face.pupils }, () => ({ loose: parts.face.loose }));
-		this.eyes = parts.eyes;
-		this.spinner = parts.spinner;
-		this.floater = parts.floater;
-		this.restArm = parts.restArm;
-
-		this.root.updateMatrixWorld(true);
-		for (const bone of Object.values(this.#bones)) {
-			this.#rest.set(bone, {
-				quaternion: bone.quaternion.clone(),
-				position: bone.position.clone(),
-			});
-		}
-		const world = (bone: Bone) => new Vector3().setFromMatrixPosition(bone.matrixWorld);
-		const armDirection = (side: "L" | "R") =>
-			world(this.#bones[`antebrazo.${side}`])
-				.sub(world(this.#bones[`brazo.${side}`]))
-				.normalize();
-		const legDirection = (side: "L" | "R") =>
-			world(this.#bones[`pierna.${side}`])
-				.sub(world(this.#bones[`muslo.${side}`]))
-				.normalize();
-		this.#armRest = {
-			L: Math.atan2(armDirection("L").x, -armDirection("L").y),
-			R: Math.atan2(armDirection("R").x, -armDirection("R").y),
-		};
-		// Los ejes de codo y rodilla, en el espacio del hueso de arriba: el codo
-		// dobla hacia delante y la rodilla hacia atrás, vaya el brazo como vaya.
-		const local = (axis: Vector3, parent: Bone) =>
-			axis.applyQuaternion(parent.getWorldQuaternion(new Quaternion()).invert()).normalize();
-		this.#elbowAxis = {
-			L: local(armDirection("L").cross(Z_AXIS), this.#bones["brazo.L"]),
-			R: local(armDirection("R").cross(Z_AXIS), this.#bones["brazo.R"]),
-		};
-		const back = new Vector3(0, 0, -1);
-		this.#kneeAxis = {
-			L: local(legDirection("L").cross(back), this.#bones["muslo.L"]),
-			R: local(legDirection("R").cross(back), this.#bones["muslo.R"]),
-		};
-
-		this.root.updateMatrixWorld(true);
-		const box = new Box3().setFromObject(parts.head, true);
-		this.height = box.max.y;
-		this.face = parts.faceFrame;
-	}
-
-	/** Pone los huesos en una pose. Todo se mide desde el reposo. */
-	pose(pose: DollPose): void {
-		const bones = this.#bones;
-		this.#turn(bones.columna, pose.spineX, 0, pose.spineZ);
-		const chest = bones.pecho;
-		const chestRest = this.#rest.get(chest);
-		if (chestRest) chest.position.copy(chestRest.position).setY(chestRest.position.y + pose.shrug);
-		chest.scale.set(1 + pose.breath, 1 + pose.breath * 0.5, 1 + pose.breath);
-		this.#turn(bones.cabeza, pose.headX, pose.headY, pose.headZ);
-		bones.cabeza.scale.set(1 + pose.jelly * 0.5, 1 - pose.jelly, 1 + pose.jelly * 0.5);
-
-		for (const side of ["L", "R"] as const) {
-			const arm = side === "L" ? pose.armL : pose.armR;
-			const twist = side === "L" ? -arm.twist : arm.twist;
-			this.#turn(bones[`brazo.${side}`], arm.x, 0, arm.z - this.#armRest[side], twist);
-			this.#bend(bones[`antebrazo.${side}`], this.#elbowAxis[side], arm.elbow);
-			const leg = side === "L" ? pose.legL : pose.legR;
-			this.#turn(bones[`muslo.${side}`], leg.x, 0, 0);
-			this.#bend(bones[`pierna.${side}`], this.#kneeAxis[side], leg.knee);
-		}
-		if (this.#muscle !== undefined) {
-			for (const body of this.#bodies) {
-				if (body.morphTargetInfluences) body.morphTargetInfluences[this.#muscle] = pose.muscle;
-			}
-		}
-	}
-
-	/** El gesto de la cara. */
-	express(face: Expression): void {
-		this.#paint.show(face);
-	}
-
-	/**
-	 * Adónde mira la pupila `i`: `x` e `y` de -1 a 1 dentro del ojo (arriba es
-	 * positivo) y `size` para encogerla del susto.
-	 */
-	gaze(i: number, x: number, y: number, size: number): void {
-		this.#paint.gaze(i, x, y, size);
-	}
-
-	dispose(): void {
-		for (const item of this.#owned) item.dispose();
-		this.#paint.dispose();
-		this.root.removeFromParent();
-	}
-
-	/**
-	 * Giro desde el reposo, en los ejes del padre (que en reposo son los del
-	 * mundo), y `twist` sobre el propio hueso.
-	 */
-	#turn(bone: Bone, x: number, y: number, z: number, twist = 0): void {
-		const rest = this.#rest.get(bone);
-		if (!rest) return;
-		bone.quaternion.setFromEuler(this.#euler.set(x, y, z)).multiply(rest.quaternion);
-		if (twist) bone.quaternion.multiply(this.#q.setFromAxisAngle(Y_AXIS, twist));
-	}
-
-	#bend(bone: Bone, axis: Vector3, angle: number): void {
-		const rest = this.#rest.get(bone);
-		if (!rest) return;
-		bone.quaternion.copy(this.#q.setFromAxisAngle(axis, angle)).multiply(rest.quaternion);
-	}
-}
-
-interface DollParts {
-	armature: Object3D;
-	bones: Record<BoneName, Bone>;
-	bodies: SkinnedMesh[];
-	head: Object3D;
-	face: Face;
-	faceFrame: { center: Vector3; size: number };
-	eyes: Object3D;
-	spinner: Object3D | null;
-	floater: Object3D | null;
-	restArm: number;
-	owned: (Material | Texture)[];
-}
-
 export interface BuildOptions {
 	/** Lado del lienzo de la cara, en píxeles: más grande para el perfil. */
 	faceSize?: number;
-}
-
-/** Construye el muñeco de un aspecto. Mismo aspecto, mismo muñeco. */
-export function buildAvatar(look: AvatarLook, kit: Kit, options: BuildOptions = {}): Doll {
-	const owned: (Material | Texture)[] = [];
-	const palette = new Palette(look, owned);
-
-	// El cuerpo y lo que va cosido a él.
-	const armature = cloneSkinned(kit.armature);
-	const named = new Map<string, Object3D>();
-	armature.traverse((object) => {
-		const name = object.userData.name;
-		if (typeof name === "string") named.set(name, object);
-	});
-	const bones = {} as Record<BoneName, Bone>;
-	for (const name of BONES) {
-		const bone = named.get(name);
-		if (!(bone instanceof Bone)) throw new Error(`Al esqueleto le falta ${name}`);
-		bones[name] = bone;
-	}
-	const wanted = new Set(["cuerpo"]);
-	if (look.top === "vestido") wanted.add("ropa.vestido");
-	else if (look.bottom === "falda") wanted.add("ropa.falda");
-	if (look.top === "sudadera") wanted.add("ropa.capucha");
-	if (look.top === "traje") wanted.add("extra.corbata");
-	if (look.extra) wanted.add(`extra.${look.extra}`);
-	for (const [name, object] of named) {
-		if (/^(ropa|extra)\./.test(name) && !wanted.has(name)) object.removeFromParent();
-	}
-	armature.updateMatrixWorld(true);
-	const neck = bones.cabeza.getWorldPosition(new Vector3());
-	const body = named.get("cuerpo");
-	const bodies: SkinnedMesh[] = [];
-	const bodyPaint = bodyMaterial(look, kit.body);
-	owned.push(bodyPaint);
-	armature.traverse((object) => {
-		if (!(object instanceof SkinnedMesh)) return;
-		object.frustumCulled = false;
-		object.castShadow = true;
-		object.receiveShadow = true;
-		if (object === body || object.parent === body) {
-			prepareBody(object, bodyPaint);
-			bodies.push(object);
-		} else {
-			object.material = palette.for(object.material);
-		}
-	});
-
-	// La cabeza, con todo lo que lleva, cuelga del hueso del cuello.
-	const head = new Group();
-	bones.cabeza.add(head);
-	const form = kit.head;
-	const layout = planFace(look, kit, form);
-
-	const faceSize = options.faceSize ?? 256;
-	const face = new Face(look, layout.plan(faceSize), faceSize);
-	const skull = form.mesh.clone();
-	skull.position.set(0, 0, 0);
-	skull.material = headMaterial(face);
-	skull.castShadow = true;
-	skull.receiveShadow = true;
-	owned.push(skull.material);
-	head.add(skull);
-
-	// Entre los ojos: lo que se mide para sacudir las pupilas.
-	const eyes = new Group();
-	const [right, left] = layout.eyes;
-	if (right && left) {
-		eyes.position.copy(form.point(right.yaw, right.pitch)).add(form.point(left.yaw, left.pitch));
-		eyes.position.multiplyScalar(0.5);
-	}
-	head.add(eyes);
-
-	let spinner: Object3D | null = null;
-	let floater: Object3D | null = null;
-	for (const { piece, tilt } of layout.pieces) {
-		const worn = piece.template.clone();
-		dress(worn, palette);
-		// Echado hacia atrás si hace falta, para que no tape los ojos.
-		const pivot = new Group();
-		pivot.position.copy(form.center);
-		worn.position.copy(form.center).negate();
-		pivot.add(worn);
-		pivot.rotation.x = -tilt;
-		head.add(pivot);
-		if (piece.floats) floater = worn;
-		if (piece.name === "gorro.helice") {
-			const blades = kit.piece("gorro.helice.aspas");
-			if (blades?.axis) {
-				// La hélice gira sobre su eje: se cuelga de él.
-				const propeller = blades.template.clone();
-				dress(propeller, palette);
-				const spin = new Group();
-				spin.position.copy(blades.axis);
-				propeller.position.copy(blades.axis).negate();
-				spin.add(propeller);
-				worn.add(spin);
-				spinner = spin;
-			}
-		}
-	}
-	for (const prop of placeFaceProps(look, kit, form, layout)) {
-		dress(prop, palette);
-		head.add(prop);
-	}
-
-	return new Doll({
-		armature,
-		bones,
-		bodies,
-		head,
-		face,
-		faceFrame: {
-			center: form.center.clone().add(neck),
-			size: form.span / 1.08,
-		},
-		eyes,
-		spinner,
-		floater,
-		restArm: look.top === "vestido" || look.bottom === "falda" ? 0.5 : 0.36,
-		owned,
-	});
 }
 
 // ---------------------------------------------------------------------------
@@ -427,9 +64,9 @@ export function buildAvatar(look: AvatarLook, kit: Kit, options: BuildOptions = 
 // ---------------------------------------------------------------------------
 
 /**
- * Los materiales de un muñeco, por el nombre que traen del kit: "pelo" es el
- * color de pelo que le tocó, "gorro" el del gorro, "fijo.oro" el oro de todas
- * las coronas.
+ * Los materiales de un slime, por el nombre que traen las piezas del kit:
+ * "pelo" es el color de pelo que le tocó, "gorro" el del gorro, "fijo.oro" el
+ * oro de todas las coronas.
  */
 export class Palette {
 	#look: AvatarLook;
@@ -443,14 +80,14 @@ export class Palette {
 
 	for(source: Material | Material[]): Material {
 		const material = Array.isArray(source) ? source[0] : source;
-		if (!material) return this.#make("ropa");
+		if (!material) return this.#make("gorro");
 		if (material.name.startsWith("fijo.") && material instanceof MeshStandardMaterial) {
 			return fixedMaterial(material);
 		}
 		return this.#make(material.name);
 	}
 
-	/** Un material propio de este muñeco (se tira con él). */
+	/** Un material propio de este slime (se tira con él). */
 	#own<T extends Material>(key: string, make: () => T): T {
 		const cached = this.#made.get(key);
 		if (cached) return cached as T;
@@ -462,7 +99,6 @@ export class Palette {
 
 	#make(name: string): Material {
 		const look = this.#look;
-		const hatAccent = look.topAccent !== look.hatColor ? look.topAccent : "#f4f1ea";
 		switch (name) {
 			case "pelo":
 			case "pelo.negro":
@@ -471,21 +107,16 @@ export class Palette {
 				return this.#own("rapado", () =>
 					velvet(new Color(look.hairColor).lerp(new Color(look.skin), 0.35)),
 				);
-			case "gorro":
-				return this.#own("gorro", () => velvet(look.hatColor));
 			case "gorro.2":
-				return this.#own("gorro.2", () => velvet(hatAccent));
-			case "abajo":
-				return this.#own("abajo", () => velvet(look.bottomColor));
-			case "acento":
-				return this.#own("acento", () => velvet(look.topAccent));
+				return this.#own("gorro.2", () => velvet(look.hatAccent));
 			default:
-				return this.#own("ropa", () => velvet(look.topColor));
+				// "gorro", y cualquier otro que no sea un color fijo del kit.
+				return this.#own("gorro", () => velvet(look.hatColor));
 		}
 	}
 }
 
-/** Pinta una pieza con los materiales de su muñeco y le pone sombras. */
+/** Pinta una pieza con los materiales de su slime y le pone sombras. */
 export function dress(object: Object3D, palette: Palette): void {
 	object.traverse((child) => {
 		if (!(child instanceof Mesh)) return;
@@ -495,24 +126,12 @@ export function dress(object: Object3D, palette: Palette): void {
 	});
 }
 
-function prepareBody(mesh: SkinnedMesh, material: BodyMaterial): void {
-	const geometry = mesh.geometry;
-	// Las zonas de ropa vienen en las UV; el material las lee con otro nombre
-	// para no chocar con las UV de las texturas.
-	if (!geometry.getAttribute("zone")) {
-		const uv = geometry.getAttribute("uv");
-		if (uv) geometry.setAttribute("zone", uv);
-	}
-	mesh.material = material;
-	mesh.morphTargetInfluences?.fill(0);
-}
-
 // ---------------------------------------------------------------------------
 // La cara
 // ---------------------------------------------------------------------------
 
 export interface FaceLayout {
-	/** Los ojos: guiñada, cabeceo y radio. El primero es el derecho del muñeco (-X). */
+	/** Los ojos: guiñada, cabeceo y radio. El primero es el derecho del slime (-X). */
 	eyes: { yaw: number; pitch: number; r: number }[];
 	mouth: number;
 	nose: number;

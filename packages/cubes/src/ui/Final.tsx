@@ -17,7 +17,7 @@ export interface FinalProps {
 const PODIUM_PLACES = 3;
 
 /**
- * El final: el podio con los muñecos y, debajo, la clasificación entera.
+ * El final: el podio con los slimes y, debajo, la clasificación entera.
  *
  * Los empatados a puntos comparten puesto y, si empatan arriba, comparten
  * también escalón: no hay desempate que valga en un juego de un segundo.

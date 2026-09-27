@@ -1,7 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar.tsx";
 import type { Stage, StageActor, StageVariant } from "./avatar/stage.ts";
-import { useAvatarStyle } from "./avatarStyle.ts";
 
 export type { StageActor, StageVariant };
 
@@ -16,13 +15,13 @@ export interface AvatarStageProps {
 	variant?: StageVariant;
 	/** Lo que va con cada uno (su nombre): el escenario lo coloca bajo su peana. */
 	renderLabel?: (actor: StageActor) => ReactNode;
-	/** Alguien ha tocado un muñeco, que ya está haciendo su gesto. */
+	/** Alguien ha tocado un slime, que ya está haciendo su gesto. */
 	onTap?: (id: string) => void;
 	className?: string;
 }
 
 /**
- * Los muñecos 3D de un grupo, cada uno en su peana y moviéndose.
+ * Los slimes 3D de un grupo, cada uno en su peana y moviéndose.
  *
  * La escena (three.js) se carga aparte cuando hace falta, para que la portada
  * no la pague. Si el móvil no tiene WebGL se pinta una fila de retratos
@@ -43,8 +42,6 @@ export function AvatarStage({
 	const actorsRef = useRef(actors);
 	actorsRef.current = actors;
 	const [flat, setFlat] = useState(false);
-	// Cambiar de estilo monta el escenario de nuevo: todos vuelven a caer del cielo.
-	const style = useAvatarStyle();
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -59,7 +56,6 @@ export function AvatarStage({
 				if (cancelled) return;
 				stage = createStage(canvas, {
 					variant,
-					style,
 					calm: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
 					label: (id) => labels.current.get(id),
 					onFail: () => {
@@ -87,7 +83,7 @@ export function AvatarStage({
 			stage?.dispose();
 			stageRef.current = null;
 		};
-	}, [variant, style]);
+	}, [variant]);
 
 	// Pasarle la misma gente otra vez no mueve a nadie: sólo se nota lo que cambia.
 	useEffect(() => {
@@ -121,11 +117,7 @@ export function AvatarStage({
 				}}
 			>
 				{/* Un lienzo nuevo por escenario: el anterior suelta su contexto al irse y ya no vale. */}
-				<canvas
-					key={`${variant}:${style}`}
-					ref={canvasRef}
-					className="absolute inset-0 block h-full w-full"
-				/>
+				<canvas key={variant} ref={canvasRef} className="absolute inset-0 block h-full w-full" />
 				{renderLabel && (
 					<div className="pointer-events-none absolute inset-0 overflow-hidden">
 						{actors.map((actor) => (

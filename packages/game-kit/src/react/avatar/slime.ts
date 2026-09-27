@@ -13,7 +13,7 @@ import {
 import { type Expression, Face } from "./face.ts";
 import { JELLY_REST, Jelly, type JellyShape } from "./jelly.ts";
 import type { Kit } from "./kit.ts";
-import { type AvatarLook, slimeColor } from "./look.ts";
+import type { AvatarLook } from "./look.ts";
 import { slimeMaterial, slimeShadowMaterial, velvet } from "./materials.ts";
 import {
 	type BuildOptions,
@@ -25,13 +25,14 @@ import {
 } from "./model.ts";
 
 /**
- * La prueba de los slimes: en vez de muñecos, gotas de gelatina con cara.
+ * Los slimes: gotas de gelatina con cara, que es lo que es cada jugador.
  *
  * El slime es una sola malla del kit, sin huesos: se deforma entera en el
- * sombreador (`jelly.ts`). Su parte de arriba es la cabeza de los muñecos a
- * escala, así que lleva la misma cara dibujada, los mismos gorros y pelos y
- * las mismas gafas; lo que no es gelatina (el gorro, las gafas, el bracito) va
- * colgado de la superficie deformada, y se aplasta, se inclina y gira con ella.
+ * sombreador (`jelly.ts`). Su parte de arriba es la cabeza de referencia del
+ * kit a escala, así que le valen la cara dibujada, los gorros, los pelos y las
+ * gafas hechos para ella; lo que no es gelatina (el gorro, las gafas, el
+ * bracito) va colgado de la superficie deformada, y se aplasta, se inclina y
+ * gira con ella.
  *
  * Para saludar le sale del costado un bracito, y al chafarse contra el suelo
  * le saltan gotitas.
@@ -279,10 +280,8 @@ let armShape: LatheGeometry | undefined;
 /** Construye el slime de un aspecto. Mismo aspecto, mismo slime. */
 export function buildSlime(look: AvatarLook, kit: Kit, options: BuildOptions = {}): SlimeDoll {
 	const owned: (Material | Texture)[] = [];
-	const color = slimeColor(look);
-	// La cara y todo lo demás van sobre la gelatina, como sobre la piel.
-	const jelly: AvatarLook = { ...look, skin: color };
-	const palette = new Palette(jelly, owned);
+	const color = look.skin;
+	const palette = new Palette(look, owned);
 
 	const geometry = kit.slime.mesh.geometry;
 	geometry.computeBoundingBox();
@@ -290,9 +289,9 @@ export function buildSlime(look: AvatarLook, kit: Kit, options: BuildOptions = {
 	const deformer = new Jelly(top);
 
 	const form = kit.slime.form;
-	const layout = planFace(jelly, kit, form);
+	const layout = planFace(look, kit, form);
 	const faceSize = options.faceSize ?? 256;
-	const face = new Face(jelly, layout.plan(faceSize), faceSize);
+	const face = new Face(look, layout.plan(faceSize), faceSize);
 	const skin = slimeMaterial(face, deformer);
 	const shadow = slimeShadowMaterial(deformer);
 	owned.push(skin, shadow);
@@ -329,8 +328,8 @@ export function buildSlime(look: AvatarLook, kit: Kit, options: BuildOptions = {
 	for (const { piece, tilt } of layout.pieces) {
 		const worn = piece.template.clone();
 		dress(worn, palette);
-		// Los gorros y pelos de los muñecos, a la escala del slime: el centro de
-		// su cabeza, en el centro de la de gelatina.
+		// Los gorros y pelos del kit, a la escala del slime: el centro de la
+		// cabeza de referencia, en el centro de la de gelatina.
 		const holder = new Group();
 		holder.scale.setScalar(kit.slime.scale);
 		holder.position.copy(kit.head.center).multiplyScalar(-kit.slime.scale);
@@ -355,7 +354,7 @@ export function buildSlime(look: AvatarLook, kit: Kit, options: BuildOptions = {
 			}
 		}
 	}
-	for (const prop of placeFaceProps(jelly, kit, form, layout)) {
+	for (const prop of placeFaceProps(look, kit, form, layout)) {
 		dress(prop, palette);
 		anchors.face.group.add(prop);
 	}

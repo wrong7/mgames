@@ -9,45 +9,33 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import kitUrl from "./munecos.glb?url";
 
 /**
- * El kit de muñecos: las piezas que salen de Blender (`blender/munecos.py`).
+ * El kit de los slimes: las piezas que salen de Blender (`blender/munecos.py`).
  *
- * Es un GLB con el cuerpo y su esqueleto, la cabeza, los pelos, los gorros y
- * los accesorios, comprimido con Draco. Se descarga una vez, cuando hace falta
- * el primer muñeco, y de ahí cada muñeco clona lo que le toque. Todos los
- * muñecos tienen el mismo cuerpo y la misma cabeza, así que pelos y gorros se
- * ponen tal cual salen de Blender.
+ * Es un GLB con la gelatina, la cabeza de referencia, los pelos, los gorros y
+ * las gafas, comprimido con Draco. Se descarga una vez, cuando hace falta el
+ * primer slime, y de ahí cada uno clona lo que le toque. Todos tienen la misma
+ * forma, así que pelos y gorros se ponen tal cual salen de Blender.
  */
 
 export interface Kit {
-	/** El esqueleto con el cuerpo y la ropa que va cosida a él: se clona entero. */
-	armature: Object3D;
+	/**
+	 * La cabeza de referencia ("craneo"), para la que están hechos los pelos, los
+	 * gorros y las gafas. Nadie la lleva: la del slime es ésta a otra escala.
+	 */
 	head: HeadForm;
-	body: BodyMeasures;
-	/** El slime, para la prueba de personajes de gelatina. */
 	slime: SlimeKit;
 	piece(name: string): Piece | undefined;
 }
 
 /**
  * El slime: su malla, sin huesos (la deforma `jelly.ts`), y la forma de su
- * parte de arriba, que es la cabeza de los muñecos a `scale`: a esa escala le
+ * parte de arriba, que es la cabeza de referencia a `scale`: a esa escala le
  * valen los mismos gorros, pelos y caras.
  */
 export interface SlimeKit {
 	mesh: Mesh;
 	form: HeadForm;
 	scale: number;
-}
-
-/** Medidas del cuerpo para pintarle la ropa, en unidades de muñeco. */
-export interface BodyMeasures {
-	/** Altura de la cintura: aquí acaba la camiseta y empieza el pantalón. */
-	waist: number;
-	/** Altura del escote por la espalda. */
-	neckline: number;
-	/** Del hombro a la muñeca y de la ingle al tobillo. */
-	arm: number;
-	leg: number;
 }
 
 export interface Piece {
@@ -61,13 +49,13 @@ export interface Piece {
 	floats: boolean;
 }
 
-/** De Blender (Z arriba, el muñeco mira a -Y) a three.js (Y arriba, mira a +Z). */
+/** De Blender (Z arriba, mirando a -Y) a three.js (Y arriba, mirando a +Z). */
 function fromBlender(values: unknown): Vector3 {
 	const [x = 0, y = 0, z = 0] = Array.isArray(values) ? (values as number[]) : [];
 	return new Vector3(x, z, -y);
 }
 
-/** Guiñada 0 es de frente (+Z) y positiva hacia la izquierda del muñeco (+X); el cabeceo sube. */
+/** Guiñada 0 es de frente (+Z) y positiva hacia la izquierda de la cabeza (+X); el cabeceo sube. */
 function direction(yaw: number, pitch: number, out = new Vector3()): Vector3 {
 	return out.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
 }
@@ -175,14 +163,11 @@ function indexKit(scene: Object3D): Kit {
 		const name = object.userData.name;
 		if (typeof name === "string" && !named.has(name)) named.set(name, object);
 	});
-	const armature = named.get("esqueleto");
 	const skull = named.get("craneo");
-	const body = named.get("cuerpo");
 	const slime = named.get("baba");
-	if (!armature || !(skull instanceof Mesh) || !body || !(slime instanceof Mesh)) {
+	if (!(skull instanceof Mesh) || !(slime instanceof Mesh)) {
 		throw new Error("Al kit le faltan piezas");
 	}
-	const measures = body.userData as Record<string, unknown>;
 
 	const pieces = new Map<string, Piece>();
 	for (const [name, object] of named) {
@@ -198,14 +183,7 @@ function indexKit(scene: Object3D): Kit {
 	}
 
 	return {
-		armature,
 		head: new HeadForm(skull),
-		body: {
-			waist: Number(measures.cintura),
-			neckline: Number(measures.escote),
-			arm: Number(measures.brazo),
-			leg: Number(measures.pierna),
-		},
 		slime: {
 			mesh: slime,
 			form: new HeadForm(slime),

@@ -13,7 +13,7 @@ completa, sin scroll y con las áreas táctiles grandes.
 ```
 apps/web             La web: catálogo de juegos y rutas (TanStack Start)
 apps/realtime        Servidor de salas: un Durable Object por partida (Cloudflare Workers)
-packages/game-kit    Contrato entre juego y app: manifest, motores, códigos, azar determinista, muñecos
+packages/game-kit    Contrato entre juego y app: manifest, motores, códigos, azar determinista, slimes
 packages/codenames   Código Secreto: motor e interfaz
 packages/cubes       Visto y no visto: motor e interfaz
 packages/spy         El Espía: motor e interfaz
@@ -50,16 +50,16 @@ se elige a qué jugar. Se puede cambiar de juego sin que nadie vuelva a teclear
 nada.
 
 - **Perfil.** No hay cuentas. La primera vez que alguien abre una sala se le
-  pide un nombre y se le da un muñeco 3D con mucha cara de tonto, generado a
+  pide un nombre y se le da un slime 3D con mucha cara de tonto, generado a
   partir de una semilla que puede volver a tirar hasta que le guste (y deshacer
   si se pasa uno bueno). Se
   guarda en el móvil y desde ahí viaja con cada conexión y cada jugada: es lo que
   los demás ven en las fichas y en las listas. La ruta `_jugador` es la puerta:
   nada se abre sin él.
 - **Sala.** Un código de cuatro caracteres. Conectarse es entrar; salir es un
-  botón. Mientras se elige juego, la sala es un escenario: cada uno es su muñeco
-  en una peana, el que llega cae del cielo y el que se va da un salto y
-  desaparece. El primero que entró es el anfitrión y es quien pone un juego
+  botón. Mientras se elige juego, la sala es un escenario: cada uno es su slime
+  en una peana, el que llega cae del cielo y el que se va se derrite en un
+  charco. El primero que entró es el anfitrión y es quien pone un juego
   sobre la mesa o lo recoge — la forma más simple de que no haya cinco dedos
   cambiando de juego a la vez.
 - **Juego.** Recibe la gente de la sala y no lleva lista propia. Código Secreto
@@ -116,87 +116,80 @@ Seis decisiones que conviene conocer antes de tocar nada:
   servidor; si no toca, no pasa nada. Sin nadie mirando, la partida espera en
   vez de jugarse sola.
 
-## Los muñecos
+## Los slimes
 
-Viven en `packages/game-kit/src/react/avatar`. Las piezas se modelan en
-Blender y el resto (qué lleva cada uno, los colores, la cara, cómo se mueve)
-sale de la semilla en el navegador.
+Cada jugador es un slime: una gota de gelatina pequeñita, la mitad de su
+peana, con mucha cara. Viven en `packages/game-kit/src/react/avatar`. Las
+piezas se modelan en Blender y el resto (el color, la cara, qué lleva en la
+cabeza, cómo se mueve) sale de la semilla en el navegador.
 
-El estilo es el de los juegos de fiesta: todos con el mismo cuerpo y la misma
-cabeza (unas dos cabezas y media de alto: gracioso, pero no cabezón), pieles
-humanas o de mascota (amarillo, verde alienígena...), gorros de disfraz, de la
+El estilo es el de los juegos de fiesta: todos con la misma forma de gota,
+colores de mascota (amarillo, verde alienígena...), gorros de disfraz, de la
 capucha de cangrejo al cono de obra, y caras que hacen gracia solas. La cara es
 toda dibujo, con el mismo trazo de rotulador: ojos, cejas, nariz, boca, bigote
 o pecas son planos, sin relieve; las gafas y los gorros sí son objetos.
 
 - **La semilla es todo.** `look.ts` convierte los ocho caracteres de
-  `profile.avatar` en un aspecto (cara, pelo, gorro, ropa y hasta el gesto
-  favorito) con el mismo azar determinista de los juegos, así
-  que todos los móviles ven el mismo muñeco sin que viaje nada más. Cambiar
-  esas listas o el orden de las tiradas cambia la cara de todo el mundo a la
-  vez: no rompe nada, porque sólo se guarda la semilla, pero conviene hacerlo a
-  sabiendas.
+  `profile.avatar` en un aspecto (color, cara, pelo, gorro y hasta el gesto
+  favorito) con el mismo azar determinista de los juegos, así que todos los
+  móviles ven el mismo slime sin que viaje nada más. Cambiar esas listas o el
+  orden de las tiradas cambia la cara de todo el mundo a la vez: no rompe
+  nada, porque sólo se guarda la semilla, pero conviene hacerlo a sabiendas.
+  Por eso se siguen haciendo las tiradas de la ropa de cuando los avatares
+  eran muñecos, y un test fija el aspecto de unas cuantas semillas.
 - **Las piezas, de Blender.** `packages/game-kit/blender/munecos.py` genera el
   kit entero con código (así se regenera y se revisa en un diff) y lo exporta a
-  `munecos.glb`, comprimido con Draco (unos 400 KB): el cuerpo con su
-  esqueleto, la cabeza, catorce peinados, veintiún gorros, faldas, capucha,
-  corbata, pañuelo, bandolera, gafas, monóculo y el slime. Para regenerarlo (con
-  `--preview carpeta` saca además fotos de comprobación):
+  `munecos.glb`, comprimido con Draco (unos 400 KB): la gota de gelatina, la
+  cabeza de referencia, catorce peinados, veintiún gorros, gafas y monóculo.
+  Lleva también el cuerpo y la ropa de cuando eran muñecos, que la web ya no
+  usa. Para regenerarlo (con `--preview carpeta` saca además fotos de
+  comprobación):
 
   ```bash
   blender --background --factory-startup --python packages/game-kit/blender/munecos.py -- packages/game-kit/src/react/avatar/munecos.glb
   ```
 
 - **Montaje en la web.** `kit.ts` descarga el GLB la primera vez que hace
-  falta; `model.ts` clona el esqueleto, cuelga de la cabeza lo que toque y lo
-  pinta. La ropa no son piezas: el cuerpo lleva en las UV por dónde va cada
-  punto del brazo y de la pierna, y un sombreador (`materials.ts`) pinta la
-  manga, la pernera o la bota con un umbral, con bordes limpios. La cara se
-  pinta en un lienzo (`face.ts`) que la cabeza lleva de textura y cambia con el
-  gesto: ojos cerrados al parpadear, ^^ al celebrar, la O del susto. Las
-  pupilas las pinta el sombreador de la cabeza sobre el blanco del ojo, así que
+  falta y `slime.ts` monta cada slime. La parte de arriba de la gota es la
+  cabeza de referencia a escala, así que le valen los pelos, los gorros y las
+  gafas hechos para ella: `model.ts` decide dónde van los ojos y la boca, echa
+  el pelo y el gorro hacia atrás lo justo para no taparlos y les da color. La
+  cara se pinta en un lienzo (`face.ts`) que la gelatina lleva de textura y
+  cambia con el gesto: ojos cerrados al parpadear, ^^ al celebrar, la O del
+  susto. Las pupilas las pinta el sombreador sobre el blanco del ojo, así que
   se mueven cada fotograma sin volver a pintar el lienzo.
-- **Muelles, no animaciones grabadas.** `motion.ts` calcula cada pose con
-  fórmulas y mueve los huesos (hombros, codos, cadera, rodillas, cuello), y
-  encima pone muelles: las pupilas sueltas se bambolean y se quedan atrás al
-  saltar, los brazos siguen con retraso, como fideos, y la cabeza tiembla como
-  un flan al caer. Los gestos (saludar, caerse de culo, sacar bíceps, el baile
-  de la gallina...) salen solos de vez en cuando o al tocar al muñeco.
-- **Luz de estudio, muñecos de terciopelo.** `scene.ts` pone una luz principal
+- **Gelatina, sin huesos.** `jelly.ts` deforma el slime punto a punto en el
+  sombreador (se aplasta desparramándose por abajo, se estira como una gota,
+  se dobla como un flan, tiembla ovalándose, se le ven ondas al caer) y la
+  misma cuenta en TypeScript cuelga de la superficie deformada el gorro, las
+  gafas y el bracito.
+- **Muelles, no animaciones grabadas.** `slime-motion.ts` calcula cada pose
+  con fórmulas y la mueve con muelles encadenados: la cima sigue a la base con
+  retraso, así que cada golpe le sube por el cuerpo como una onda y da
+  latigazos; nota los frenazos cuando lo cambian de sitio, y si cae de alto le
+  saltan gotitas. Sabe saludar con un bracito que le sale del costado, saltar,
+  aplastarse como una tortita, temblar como un flan, estirarse para mirar a lo
+  lejos, botar, dar vueltas, inflarse como un globo (y salir disparado al
+  desinflarse), tiritar de miedo y bailar. Los gestos salen solos de vez en
+  cuando o al tocarlo, que le da un meneo. Para irse, se derrite en un charco.
+- **Luz de estudio, slimes de terciopelo.** `scene.ts` pone una luz principal
   con sombras suaves, un contraluz y un entorno propio (una cúpula morada con
   tres focos). Todo es de terciopelo, como los muñecos flocados: mate, sin
   reflejos de los focos, con el brillo suave del terciopelo en los bordes. Si
   los fotogramas van lentos, el escenario baja solo la resolución y después
   quita las sombras.
 - **Un lienzo para todos.** `<AvatarStage>` pone a la sala entera en una sola
-  escena (`stage.ts`); `<Avatar>` es una foto fija del muñeco, hecha una vez por
+  escena (`stage.ts`); `<Avatar>` es una foto fija del slime, hecha una vez por
   semilla con un renderizador compartido, para las fichas pequeñas de los
   juegos. three.js y el kit se cargan aparte y sólo cuando hacen falta:
-  mientras llegan se ven las peanas (y los muñecos caen sobre ellas al
+  mientras llegan se ven las peanas (y los slimes caen sobre ellas al
   llegar), y sin WebGL, o si el kit no baja, se ven retratos planos.
 - **El podio.** Con `variant="podio"`, el mismo escenario cierra una partida:
   cada uno en la columna de su puesto (`place`), de oro, plata o bronce, que
   sube del suelo. Caen del último al primero, como en una entrega de medallas,
-  y el que gana no para de celebrarlo mientras los demás le aplauden (a los
-  muñecos se les puede decir qué gestos hacer por su cuenta). Visto y no visto
-  lo usa en su clasificación.
-- **De prueba: slimes.** En el perfil, un interruptor cambia los muñecos por
-  slimes en ese móvil (se guarda en el navegador y no viaja: cada uno ve a
-  todos con el estilo que tenga puesto). El slime es una gota de gelatina
-  pequeñita, la mitad de su peana, y su parte de arriba es la cabeza de los
-  muñecos a escala, así que lleva la misma cara, los mismos pelos y los
-  mismos gorros. No tiene huesos: `jelly.ts` lo deforma punto a punto en el
-  sombreador (se aplasta desparramándose por abajo, se estira como una gota,
-  se dobla como un flan, tiembla ovalándose, se le ven ondas al caer) y la
-  misma cuenta en TypeScript cuelga de la superficie deformada el gorro, las
-  gafas y el bracito. `slime-motion.ts` lo mueve con muelles encadenados: la
-  cima sigue a la base con retraso, así que cada golpe le sube por el cuerpo
-  como una onda y da latigazos; nota los frenazos cuando lo cambian de sitio,
-  y si cae de alto le saltan gotitas. Sabe saludar con un bracito que le sale
-  del costado, saltar, aplastarse como una tortita, temblar como un flan,
-  estirarse para mirar a lo lejos, botar, dar vueltas, inflarse como un globo
-  (y salir disparado al desinflarse), tiritar de miedo y bailar; al tocarlo
-  le da un meneo. Para irse, se derrite en un charco.
+  y el que gana no para de celebrarlo (bota, baila, se infla) mientras los
+  demás le saludan (a los slimes se les puede decir qué gestos hacer por su
+  cuenta). Visto y no visto lo usa en su clasificación.
 
 ## Añadir un juego
 

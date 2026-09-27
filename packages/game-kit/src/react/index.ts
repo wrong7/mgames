@@ -12,7 +12,6 @@ export {
 	type StageActor,
 	type StageVariant,
 } from "./AvatarStage.tsx";
-export { type AvatarStyle, setAvatarStyle, useAvatarStyle } from "./avatarStyle.ts";
 export {
 	draftProfile,
 	type ProfileStore,

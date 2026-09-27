@@ -1,14 +1,14 @@
 import { Vector3 } from "three";
-import type { Gesture } from "./look.ts";
+import { SLIME_GESTURES, type SlimeGesture } from "./look.ts";
 import { backOut, type Entrance, expression, Gaze, type PuppetOptions, smooth } from "./motion.ts";
 import type { SlimeDoll } from "./slime.ts";
 
 /**
  * Cómo se mueve un slime.
  *
- * Como los muñecos (`motion.ts`): cada fotograma sale una pose del reloj y del
- * gesto que toque. Pero la pose sólo dice adónde quiere ir la gelatina; lo que
- * se ve lo mueven muelles, y es ahí donde está la gracia:
+ * Cada fotograma sale una pose del reloj y del gesto que toque. Pero la pose
+ * sólo dice adónde quiere ir la gelatina; lo que se ve lo mueven muelles, y es
+ * ahí donde está la gracia:
  *
  * - Abajo y arriba se aplastan cada uno con su muelle, y el de arriba sigue al
  *   de abajo con retraso: al caer, el golpe sube por el cuerpo como una onda.
@@ -24,21 +24,6 @@ import type { SlimeDoll } from "./slime.ts";
  *   en cuando le da un temblorcito.
  */
 
-/** Lo que hace un slime por su cuenta de vez en cuando, o al tocarlo. */
-export const SLIME_GESTURES = [
-	"saluda",
-	"salto",
-	"aplasta",
-	"flan",
-	"estira",
-	"rebota",
-	"vuelta",
-	"infla",
-	"tiembla",
-	"baila",
-] as const;
-export type SlimeGesture = (typeof SLIME_GESTURES)[number];
-
 /** Cuánto dura cada gesto, en segundos (a ritmo 1). */
 const DURATION: Record<SlimeGesture, number> = {
 	saluda: 1.9,
@@ -51,22 +36,6 @@ const DURATION: Record<SlimeGesture, number> = {
 	infla: 2.8,
 	tiembla: 1.6,
 	baila: 2.6,
-};
-
-/** El favorito de su muñeco, en gelatina: lo más parecido que sabe hacer. */
-const FAVORITE: Record<Gesture, SlimeGesture> = {
-	saludo: "saluda",
-	salto: "salto",
-	baile: "baila",
-	vuelta: "vuelta",
-	celebra: "rebota",
-	mira: "estira",
-	aplaude: "flan",
-	encoge: "aplasta",
-	culazo: "aplasta",
-	flexiona: "infla",
-	gallina: "flan",
-	grita: "tiembla",
 };
 
 /** Los botes de "rebota", cada uno más bajo, y la gravedad con la que caen. */
@@ -191,7 +160,7 @@ export class SlimePuppet {
 	#favorite: SlimeGesture;
 	#calm: boolean;
 	#every: readonly [number, number];
-	/** Los gestos pedidos (en gestos de muñeco), traducidos a lo más parecido que sabe hacer. */
+	/** Los únicos que hace, si se le han pedido (en un podio, el que gana sólo celebra). */
 	#gestures: readonly SlimeGesture[] | undefined;
 	#time: number;
 	#gesture: {
@@ -238,15 +207,13 @@ export class SlimePuppet {
 	#speed = new Vector3();
 	#tracking = false;
 
-	constructor(rig: SlimeDoll, tempo: number, favorite: Gesture, options: PuppetOptions = {}) {
+	constructor(rig: SlimeDoll, tempo: number, favorite: SlimeGesture, options: PuppetOptions = {}) {
 		this.rig = rig;
 		this.#tempo = tempo;
-		this.#favorite = FAVORITE[favorite];
+		this.#favorite = favorite;
 		this.#calm = options.calm ?? false;
 		this.#every = options.every ?? [4, 11];
-		this.#gestures = options.gestures?.length
-			? options.gestures.map((gesture) => FAVORITE[gesture])
-			: undefined;
+		this.#gestures = options.gestures?.length ? options.gestures : undefined;
 		this.#time = Math.random() * 100;
 		this.#untilGesture = this.#nextWait();
 		this.#floaterRest = rig.floater?.position.y ?? 0;

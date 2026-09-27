@@ -17,7 +17,7 @@ export interface RoomLobbyProps {
 /**
  * La sala sin juego: quién está y a qué se va a jugar.
  *
- * Arriba, el escenario: cada uno es su muñeco en una peana y el que llega cae
+ * Arriba, el escenario: cada uno es su slime en una peana y el que llega cae
  * del cielo, como en la sala de espera de los juegos de consola. Sirve para
  * saber de un vistazo si falta alguien y para hacer tiempo mientras llega.
  *

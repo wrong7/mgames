@@ -1,24 +1,26 @@
 import { createRng, type Rng } from "../../rng.ts";
 
 /**
- * De semilla a muñeco: qué lleva puesto cada uno.
+ * De semilla a slime: de qué color es cada uno y qué lleva.
  *
  * El avatar de un jugador es sólo su semilla (`profile.avatar`, ocho
- * caracteres). Todo lo demás —cara, pelo, gorro, ropa, hasta la forma de
+ * caracteres). Todo lo demás —color, cara, pelo, gorro, hasta la forma de
  * moverse— sale de aquí, así que cada móvil de la sala construye exactamente
- * el mismo muñeco sin que viaje nada más que esa cadena. "Otra cara" no edita
+ * el mismo slime sin que viaje nada más que esa cadena. "Otra cara" no edita
  * el aspecto: tira otra semilla.
  *
- * El estilo es de juego de fiesta: todos con el mismo cuerpo y la misma
- * cabeza, colores de mascota y caras dibujadas que hacen gracia por sí solas.
- * Mucho de la gracia está en las combinaciones raras (una cara amarilla con
- * ojos saltones y chistera), así que las tiradas son casi todas
- * independientes: que salga lo que salga.
+ * El estilo es de juego de fiesta: todos con la misma forma de gota, colores
+ * de mascota y caras dibujadas que hacen gracia por sí solas. Mucho de la
+ * gracia está en las combinaciones raras (un slime amarillo con ojos saltones
+ * y chistera), así que las tiradas son casi todas independientes: que salga lo
+ * que salga.
  *
  * La contrapartida es que el aspecto depende del orden de las tiradas y de las
  * listas de este fichero. Añadir un gorro o reordenar una paleta cambia la cara
  * de todo el mundo a la vez — sin romper nada, porque no se guarda el aspecto,
- * sólo la semilla —, así que conviene hacerlo a sabiendas.
+ * sólo la semilla —, así que conviene hacerlo a sabiendas. Por lo mismo se
+ * siguen haciendo las tiradas de cuando los avatares eran muñecos con ropa: sin
+ * ellas, a todo el que ya tenía su slime le saldría otro.
  *
  * Es código puro: sin three.js ni DOM. Lo usan también el retrato provisional
  * (antes de que cargue el 3D) y los tests.
@@ -137,50 +139,30 @@ export const FACE_EXTRAS = [
 ] as const;
 export type FaceExtra = (typeof FACE_EXTRAS)[number];
 
-export const TOPS = [
-	"camiseta",
-	"sudadera",
-	"chaqueta",
-	"rayas",
-	"tirantes",
-	"vestido",
-	"traje",
-] as const;
-export type Top = (typeof TOPS)[number];
-
-export const BOTTOMS = ["pantalon", "corto", "falda"] as const;
-export type Bottom = (typeof BOTTOMS)[number];
-
-/** Lo que va cruzado o anudado sobre la ropa. */
-export const BODY_EXTRAS = ["bandolera", "pañuelo", "corbata"] as const;
-export type BodyExtra = (typeof BODY_EXTRAS)[number];
-
-export const SHOES = ["zapatillas", "botas"] as const;
-export type Shoes = (typeof SHOES)[number];
-
-/** Gestos que el muñeco hace por su cuenta de vez en cuando, o al tocarlo. */
-export const GESTURES = [
-	"saludo",
+/** Lo que hace un slime por su cuenta de vez en cuando, o al tocarlo. */
+export const SLIME_GESTURES = [
+	"saluda",
 	"salto",
-	"baile",
+	"aplasta",
+	"flan",
+	"estira",
+	"rebota",
 	"vuelta",
-	"celebra",
-	"mira",
-	"aplaude",
-	"encoge",
-	"culazo",
-	"flexiona",
-	"gallina",
-	"grita",
+	"infla",
+	"tiembla",
+	"baila",
 ] as const;
-export type Gesture = (typeof GESTURES)[number];
+export type SlimeGesture = (typeof SLIME_GESTURES)[number];
 
 export interface AvatarLook {
+	/** El color de la gelatina: siempre uno de mascota (`MASCOT_SKIN`). */
 	skin: string;
 	hair: HairStyle;
 	hairColor: string;
 	hat: Hat | null;
 	hatColor: string;
+	/** El segundo color del gorro: la visera, la cinta, el pompón. */
+	hatAccent: string;
 	eyes: Eyes;
 	/** Tamaño de los ojos: de lentejas a platos. */
 	eyeSize: number;
@@ -197,36 +179,15 @@ export interface AvatarLook {
 	mouth: Mouth;
 	blush: boolean;
 	face: FaceExtra | null;
-	top: Top;
-	topColor: string;
-	/** Segundo color de la prenda: rayas, camisa bajo la chaqueta, estampado. */
-	topAccent: string;
-	/** Con vestido no hay parte de abajo: la falda es del vestido. */
-	bottom: Bottom;
-	bottomColor: string;
-	extra: BodyExtra | null;
-	shoes: Shoes;
-	shoeColor: string;
 	/** Fondo del retrato redondo. */
 	backdrop: string;
 	/** Ritmo al moverse: 1 es el normal; hay quien va más acelerado. */
 	tempo: number;
 	/** El gesto que más repite. Es lo que hace que cada uno parezca alguien. */
-	favorite: Gesture;
+	favorite: SlimeGesture;
 }
 
-const HUMAN_SKIN = [
-	"#ffe1c8",
-	"#f7cda8",
-	"#ecb88c",
-	"#d99e6c",
-	"#c08453",
-	"#9e663a",
-	"#7a4a2b",
-	"#5b3620",
-] as const;
-
-/** Pieles de mascota: el amarillo de siempre, el verde de alienígena... */
+/** Los colores de slime: el amarillo de siempre, el verde de alienígena... */
 export const MASCOT_SKIN = [
 	"#ffd23f",
 	"#ff9f43",
@@ -251,7 +212,7 @@ const NATURAL_HAIR = [
 
 const FANTASY_HAIR = ["#ff6fae", "#9d6bff", "#4c8dff", "#2cc4b0", "#5ecf6a", "#ef4f4f"] as const;
 
-/** Colores de ropa: vivos, que se distingan de lejos en una peana. */
+/** Colores vivos, que se distingan de lejos en una peana: los de los gorros. */
 export const CLOTHES = [
 	"#e84a5f",
 	"#ff8c42",
@@ -271,21 +232,6 @@ export const CLOTHES = [
 	"#f4a3a8",
 ] as const;
 
-const PANTS = [
-	"#3d5a80",
-	"#2b2d42",
-	"#c2a878",
-	"#6c757d",
-	"#5b3a29",
-	"#1d3557",
-	"#7f9c6b",
-	"#e84a5f",
-	"#9b5de5",
-	"#f4f1ea",
-] as const;
-
-const SHOE_COLORS = ["#f4f1ea", "#2b2d42", "#e84a5f", "#3a86ff", "#ffd23f", "#8a5a44", "#3bb273"];
-
 const BACKDROPS = [
 	"#ffd6a5",
 	"#fdffb6",
@@ -297,24 +243,18 @@ const BACKDROPS = [
 	"#ffadad",
 ] as const;
 
-/**
- * El color de su slime: el de mascota si lo tiene; si le tocó piel de persona,
- * uno de mascota según su ropa, que un slime color carne (o negro, donde no se
- * vería la cara) no tiene gracia.
- */
-export function slimeColor(look: AvatarLook): string {
-	if ((MASCOT_SKIN as readonly string[]).includes(look.skin)) return look.skin;
-	const index = Math.max(0, (CLOTHES as readonly string[]).indexOf(look.topColor));
-	return MASCOT_SKIN[index % MASCOT_SKIN.length] ?? MASCOT_SKIN[0];
-}
-
-/** El muñeco de una semilla. La misma semilla da siempre el mismo muñeco. */
+/** El slime de una semilla. La misma semilla da siempre el mismo slime. */
 export function avatarLook(seed: string): AvatarLook {
+	// "muñeco" porque es lo que eran: cambiarlo cambiaría todas las tiradas.
 	const rng = createRng(seed, "muñeco");
 	const between = (min: number, max: number) => min + rng.next() * (max - min);
 
 	// El orden de las tiradas es parte del formato: ver la nota de arriba.
-	const skin = rng.next() < 0.55 ? rng.pick(HUMAN_SKIN) : rng.pick(MASCOT_SKIN);
+	// Primero, si era de piel de persona o de mascota. El de mascota ya tiene su
+	// color; el de persona lo saca de su ropa, más abajo, que un slime color
+	// carne (o negro, donde no se vería la cara) no tiene gracia.
+	const human = rng.next() < 0.55;
+	const mascot = rng.pick(MASCOT_SKIN);
 	const hair = weighted<HairStyle>(rng, [
 		["corto", 3],
 		["flequillo", 2],
@@ -375,29 +315,25 @@ export function avatarLook(seed: string): AvatarLook {
 	]);
 	const blush = rng.next() < 0.4;
 	const face = rng.next() < 0.3 ? rng.pick(FACE_EXTRAS) : null;
-	const top = weighted<Top>(rng, [
-		["camiseta", 3],
-		["sudadera", 2],
-		["chaqueta", 1.6],
-		["rayas", 1.3],
-		["tirantes", 1.1],
-		["vestido", 0.8],
-		["traje", 0.8],
-	]);
-	const topColor = rng.pick(CLOTHES);
-	const topAccent = pickOther(rng, CLOTHES, topColor);
-	const bottom = weighted<Bottom>(rng, [
-		["pantalon", 4],
-		["corto", 3.5],
-		["falda", 1.2],
-	]);
-	const bottomColor = pickOther(rng, PANTS, topColor);
-	const extra = rng.next() < 0.35 ? rng.pick(BODY_EXTRAS) : null;
-	const shoes = rng.next() < 0.7 ? "zapatillas" : "botas";
-	const shoeColor = rng.pick(SHOE_COLORS);
+	// La ropa del muñeco. De ella quedan su color, que da el del slime de piel de
+	// persona, y el del detalle, que es el segundo color del gorro; el resto se
+	// tira y se descarta en el mismo orden de siempre: prenda, pantalón y su
+	// color, algo cruzado (a veces), calzado y su color.
+	rng.next();
+	const clothes = rng.pick(CLOTHES);
+	const accent = pickOther(rng, CLOTHES, clothes);
+	rng.next();
+	rng.next();
+	if (rng.next() < 0.35) rng.next();
+	rng.next();
+	rng.next();
 	const backdrop = rng.pick(BACKDROPS);
 	const tempo = between(0.85, 1.2);
-	const favorite = rng.pick(GESTURES);
+	const favorite = rng.pick(SLIME_GESTURES);
+
+	const skin = human
+		? (MASCOT_SKIN[Math.max(0, CLOTHES.indexOf(clothes)) % MASCOT_SKIN.length] ?? mascot)
+		: mascot;
 
 	return {
 		skin,
@@ -405,6 +341,8 @@ export function avatarLook(seed: string): AvatarLook {
 		hairColor,
 		hat,
 		hatColor,
+		// Si coincide con el del gorro, no se vería: crema.
+		hatAccent: accent !== hatColor ? accent : "#f4f1ea",
 		eyes,
 		eyeSize,
 		eyeSkew,
@@ -416,14 +354,6 @@ export function avatarLook(seed: string): AvatarLook {
 		mouth,
 		blush,
 		face,
-		top,
-		topColor,
-		topAccent,
-		bottom,
-		bottomColor,
-		extra,
-		shoes,
-		shoeColor,
 		backdrop,
 		tempo,
 		favorite,
@@ -440,7 +370,7 @@ function weighted<T>(rng: Rng, options: readonly (readonly [T, number])[]): T {
 	return (options[options.length - 1] as readonly [T, number])[0];
 }
 
-/** Un color de la lista que no sea `avoid`: una camiseta roja con rayas rojas no se ve. */
+/** Un color de la lista que no sea `avoid`: un gorro rojo con la cinta roja no se ve. */
 function pickOther<T>(rng: Rng, items: readonly T[], avoid: T): T {
 	const pool = items.filter((item) => item !== avoid);
 	return rng.pick(pool.length > 0 ? pool : items);

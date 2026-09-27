@@ -82,7 +82,7 @@ export function createRenderer(parameters: WebGLRendererParameters): WebGLRender
 		const renderer = new WebGLRenderer({ alpha: true, antialias: true, ...parameters });
 		renderer.setClearColor(0x000000, 0);
 		renderer.outputColorSpace = SRGBColorSpace;
-		// El mapeo neutro respeta los colores vivos de la ropa; el ACES los apaga.
+		// El mapeo neutro respeta los colores vivos de los slimes; el ACES los apaga.
 		renderer.toneMapping = NeutralToneMapping;
 		renderer.shadowMap.enabled = true;
 		renderer.shadowMap.type = PCFShadowMap;
@@ -96,7 +96,7 @@ const environments = new WeakMap<WebGLRenderer, Texture>();
 
 /**
  * La luz que llega de todas partes: una cúpula morada como el fondo y tres
- * focos de estudio. Los muñecos son de terciopelo y casi no la reflejan; lo
+ * focos de estudio. Los slimes son de terciopelo y casi no la reflejan; lo
  * que les da es la luz de ambiente del color del estudio y el brillo de los
  * bordes.
  *

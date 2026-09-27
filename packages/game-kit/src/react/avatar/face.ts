@@ -38,9 +38,9 @@ export interface EyeSpot {
  * cara: el lienzo se pinta volteado para que la cabeza lo lea derecho).
  */
 export interface FacePlan {
-	/** Píxeles del lienzo por unidad de muñeco. */
+	/** Píxeles del lienzo por unidad del kit. */
 	scale: number;
-	/** Los ojos: primero el derecho del muñeco (a la izquierda del lienzo). */
+	/** Los ojos: primero el derecho del slime (a la izquierda del lienzo). */
 	eyes: EyeSpot[];
 	/** Dónde van las cejas: el centro de cada una y su largo. */
 	brows: { x: number; y: number; w: number }[];
@@ -580,7 +580,7 @@ function open(
 }
 
 /**
- * Un ojo, del estilo del muñeco o del gesto que toque. Los que tienen blanco
+ * Un ojo, del estilo del slime o del gesto que toque. Los que tienen blanco
  * se pintan sin pupila: la pone el sombreador, que la mueve.
  */
 function paintEye(
